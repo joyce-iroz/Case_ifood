@@ -32,11 +32,13 @@ export function opcoesValor(regras: Regras, r: Restaurante) {
   return { desconto_percentual: pct.sort((a, b) => a - b), desconto_valor: fixo };
 }
 
-/** Tetos de campanha permitidos: degraus fixos que cabem no saldo do mês. */
+export const PASSO_TETO = 50;
+
+/** Tetos de campanha permitidos: de R$ 50 em R$ 50 até o saldo do mês. */
 export function opcoesTeto(saldo: number): number[] {
-  const degraus = [50, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000];
-  const cabem = degraus.filter((v) => v <= saldo);
-  return cabem.length ? cabem : saldo >= 1 ? [Math.floor(saldo)] : [];
+  const n = Math.floor(saldo / PASSO_TETO);
+  if (n >= 1) return Array.from({ length: n }, (_, i) => (i + 1) * PASSO_TETO);
+  return saldo >= 1 ? [Math.floor(saldo)] : [];
 }
 
 export type JanelaCardapio = {
@@ -249,14 +251,50 @@ export function validarAlternativas(texto: string, cardapio: Cardapio): { valida
  * com mais cadeiras vazias, o segmento com mais elegíveis nela, 10% de desconto
  * (ou o máximo permitido, se for menor) e metade do saldo do mês como teto.
  */
-export function propostaFallback(cardapio: Cardapio): { saida: SaidaModelo; proposta: PropostaCampanha; notas: string[] } | null {
+/** Janela + segmento: o que define se duas propostas são "a mesma" para o dono. */
+export const chaveCombo = (p: Pick<PropostaCampanha, "dia_semana" | "hora_inicio" | "hora_fim" | "segmento">) =>
+  `${p.dia_semana}|${p.hora_inicio}|${p.hora_fim}|${p.segmento}`;
+
+/** As combinações já mostradas, no formato do contrato, para o modelo não repetir. */
+export const paraContrato = (p: PropostaCampanha) => ({
+  dia_semana: DIAS_TEXTO[p.dia_semana],
+  hora_inicio: hhmm(p.hora_inicio),
+  hora_fim: hhmm(p.hora_fim),
+  segmento: p.segmento,
+});
+
+export function propostaFallback(
+  cardapio: Cardapio,
+  jaMostradas: Set<string> = new Set(),
+): { saida: SaidaModelo; proposta: PropostaCampanha; notas: string[] } | null {
   const pct = cardapio.valores_permitidos.desconto_percentual;
   if (!pct.length) return null;
-  for (const j of cardapio.janelas_candidatas) {
-    const [segmento, { elegiveis }] = (Object.entries(j.segmentos) as [Segmento, { elegiveis: number }][]).sort(
-      (a, b) => b[1].elegiveis - a[1].elegiveis,
-    )[0];
-    if (!elegiveis || !j.custos_maximos_permitidos.length) continue;
+  // Primeiro tenta uma combinação ainda não mostrada; se todas já foram, aceita repetir.
+  // "Já vem nesse horário" só entra se nada mais servir: desconto para ele é canibalizado.
+  const tentar = (excluir: Set<string>, aceitaJanela = false) => {
+    for (const j of cardapio.janelas_candidatas) {
+      if (!j.custos_maximos_permitidos.length) continue;
+      const dia = DIAS_TEXTO.indexOf(j.dia_semana);
+      const [inicio, fim] = [lerHHMM(j.hora_inicio)!, lerHHMM(j.hora_fim)!];
+      const ordem = (Object.entries(j.segmentos) as [Segmento, { elegiveis: number }][]).sort(
+        (a, b) => b[1].elegiveis - a[1].elegiveis,
+      );
+      const achou = ordem.find(
+        ([segmento, { elegiveis }]) =>
+          elegiveis > 0 &&
+          (aceitaJanela || segmento !== "frequenta_janela") &&
+          !excluir.has(chaveCombo({ dia_semana: dia, hora_inicio: inicio, hora_fim: fim, segmento })),
+      );
+      if (achou) return { j, segmento: achou[0], elegiveis: achou[1].elegiveis };
+    }
+    return null;
+  };
+  const novo = tentar(jaMostradas) ?? tentar(jaMostradas, true);
+  const achado = novo ?? tentar(new Set()) ?? tentar(new Set(), true);
+  if (!achado) return null;
+  const pulou = jaMostradas.size > 0 && !!novo;
+  {
+    const { j, segmento, elegiveis } = achado;
     const notas: string[] = [];
     let valor = VALOR_FALLBACK;
     if (!pct.includes(valor)) {
@@ -282,7 +320,7 @@ export function propostaFallback(cardapio: Cardapio): { saida: SaidaModelo; prop
         clientes_alvo: elegiveis,
         custo_maximo: custo,
         justificativa:
-          `Proposta montada por regra fixa, sem o modelo. ${j.dia_semana} ${formatarHora(inicio)}–${formatarHora(fim)} é a janela com mais cadeiras vazias ` +
+          `Proposta montada por regra fixa, sem o modelo. ${pulou ? "Entre as combinações ainda não mostradas, " : ""}${j.dia_semana} ${formatarHora(inicio)}–${formatarHora(fim)} é a janela com mais cadeiras vazias ` +
           `(${String(j.cadeiras_hora_vazias).replace(".", ",")} cadeiras-hora, ${ocup}% de ocupação média) e "${SEGMENTOS.find((s) => s.id === segmento)!.rotulo.toLowerCase()}" é o segmento com mais clientes elegíveis nela (${elegiveis}).`,
       },
       proposta: {
@@ -296,5 +334,4 @@ export function propostaFallback(cardapio: Cardapio): { saida: SaidaModelo; prop
       },
     };
   }
-  return null;
 }

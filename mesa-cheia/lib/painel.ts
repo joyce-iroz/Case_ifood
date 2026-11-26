@@ -32,9 +32,19 @@ export type TelefoneTeste = {
   esperadoIncremental: boolean;
 };
 
+export type TelefoneResgatado = {
+  nome: string;
+  telefone: string; // completo, só para a demo
+  campanha: CampanhaRegistro;
+  valorConta: number;
+  desconto: number;
+  resgatadoEm: string;
+};
+
 export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
   campanhas: CampanhaPainel[];
   telefonesTeste: TelefoneTeste[];
+  jaResgataram: TelefoneResgatado[];
 }> {
   await expirarVencidos();
   const hoje = hojeNoFuso();
@@ -104,5 +114,31 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     telefonesTeste.push(proximo);
   }
 
-  return { campanhas: linhas, telefonesTeste };
+  // Quem já usou: o benefício mais recente do cliente é o resgatado, então o salão
+  // responde "já usado" (se ele tiver um benefício novo, a resposta seria "ativo").
+  const maisRecente = new Map<string, (typeof beneficios)[number]>();
+  for (const b of beneficios) {
+    const atual = maisRecente.get(b.cliente_id);
+    if (!atual || b.criado_em > atual.criado_em) maisRecente.set(b.cliente_id, b);
+  }
+  const jaResgataram: TelefoneResgatado[] = [];
+  for (const r of [...resgates].sort((a, b) => b.criado_em.localeCompare(a.criado_em))) {
+    const b = beneficios.find((x) => x.id === r.beneficio_id);
+    if (!b || maisRecente.get(b.cliente_id)?.id !== b.id) continue;
+    const cl = cliente.get(b.cliente_id);
+    const tel = cl && telefonePorHash.get(cl.telefone_hash);
+    const camp = campanhaPorId.get(b.campanha_id);
+    if (!cl || !tel || !camp) continue;
+    jaResgataram.push({
+      nome: cl.nome,
+      telefone: formatarTelefoneCompleto(tel),
+      campanha: camp,
+      valorConta: r.valor_conta,
+      desconto: r.desconto,
+      resgatadoEm: r.criado_em,
+    });
+    if (jaResgataram.length === 4) break;
+  }
+
+  return { campanhas: linhas, telefonesTeste, jaResgataram };
 }

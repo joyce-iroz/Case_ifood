@@ -327,18 +327,34 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
     aoMudar({ ...p, tipo, valor });
   }
 
+  const iTeto = Math.max(0, tetos.indexOf(p.teto));
+  const mudarTeto = (i: number) => aoMudar({ ...p, teto: tetos[Math.min(tetos.length - 1, Math.max(0, i))] });
+
   return (
     <div className="editor-campos">
-      <label className="campo">
-        Janela
-        <select value={chaveJanela(janela)} onChange={(e) => trocarJanela(e.target.value)}>
-          {cardapio.janelas_candidatas.map((j) => (
-            <option key={chaveJanela(j)} value={chaveJanela(j)}>
-              {rotuloJanela(j)} · {num(j.ocupacao_media_pct)}% · {num(j.cadeiras_hora_vazias)} cad-h vazias
-            </option>
-          ))}
-        </select>
-      </label>
+      <fieldset className="campo editor-janelas">
+        <legend>Janela · as {cardapio.janelas_candidatas.length} com mais cadeiras vazias</legend>
+        <div className="janelas-grade" role="radiogroup" aria-label="Janela">
+          {cardapio.janelas_candidatas.map((j) => {
+            const ativa = chaveJanela(j) === chaveJanela(janela);
+            return (
+              <button
+                key={chaveJanela(j)}
+                type="button"
+                role="radio"
+                aria-checked={ativa}
+                className={`janela-opcao ${ativa ? "ativa" : ""}`}
+                onClick={() => trocarJanela(chaveJanela(j))}
+              >
+                <b>{rotuloJanela(j)}</b>
+                <span>
+                  {num(Math.round(j.ocupacao_media_pct))}% ocupada · {num(Math.round(j.cadeiras_hora_vazias))} cad-h vazias
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
       <label className="campo">
         Segmento
         <select value={p.segmento} onChange={(e) => aoMudar({ ...p, segmento: e.target.value as Segmento })}>
@@ -369,16 +385,37 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
           ))}
         </select>
       </label>
-      <label className="campo">
-        Teto da campanha
-        <select value={p.teto} onChange={(e) => aoMudar({ ...p, teto: Number(e.target.value) })}>
-          {tetos.map((v) => (
-            <option key={v} value={v}>
-              {formatarMoeda(v)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="campo editor-teto">
+        <span id="rot-teto">Teto da campanha</span>
+        <div className="teto-controle">
+          <button type="button" className="opcao" aria-label="Diminuir teto" onClick={() => mudarTeto(iTeto - 1)} disabled={iTeto === 0}>
+            −
+          </button>
+          <b className="teto-valor">{formatarMoeda(p.teto)}</b>
+          <button
+            type="button"
+            className="opcao"
+            aria-label="Aumentar teto"
+            onClick={() => mudarTeto(iTeto + 1)}
+            disabled={iTeto >= tetos.length - 1}
+          >
+            +
+          </button>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(0, tetos.length - 1)}
+          step={1}
+          value={iTeto}
+          onChange={(e) => mudarTeto(Number(e.target.value))}
+          aria-labelledby="rot-teto"
+          aria-valuetext={formatarMoeda(p.teto)}
+        />
+        <span className="legenda">
+          de {formatarMoeda(tetos[0] ?? 0)} a {formatarMoeda(tetos.at(-1) ?? 0)}, o saldo do mês nessa janela
+        </span>
+      </div>
     </div>
   );
 }

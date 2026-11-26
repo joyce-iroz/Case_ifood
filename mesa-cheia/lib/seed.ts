@@ -13,7 +13,7 @@ const SEMENTE = 20260601;
 export const DIAS_DE_HISTORICO = 60;
 
 /** PRNG mulberry32: rápido, reprodutível, bom o bastante para dados de demo. */
-function mulberry32(semente: number) {
+export function mulberry32(semente: number) {
   let a = semente >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -129,7 +129,7 @@ export type LinhaCliente = {
 };
 
 /** n-ésima ocorrência (0 = mais recente) do dia da semana antes de hoje. */
-function ultimaOcorrencia(hoje: string, dow: number, n: number): string {
+export function ultimaOcorrencia(hoje: string, dow: number, n: number): string {
   let atras = ((diaDaSemana(hoje) - dow + 7) % 7) || 7;
   atras += n * 7;
   return somarDias(hoje, -atras);

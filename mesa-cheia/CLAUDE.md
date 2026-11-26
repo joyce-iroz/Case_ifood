@@ -209,8 +209,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
      toda meia hora abaixo de `ocupacao_min`, ordenadas por cadeiras-hora
      vazias absolutas. As 12 primeiras vão ao modelo.
   2. Código monta o cardápio (`montarCardapio`): por janela, elegíveis por
-     segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`); valores
-     permitidos por tipo (`opcoesValor`, todos ≤ `desconto_max`).
+     segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`: de R$ 50
+     em R$ 50 até o saldo); valores permitidos por tipo (`opcoesValor`, todos
+     ≤ `desconto_max`).
   3. O modelo devolve um array de 3 alternativas no contrato (`aposta`,
      `dia_semana` "terca", `hora_inicio` "18:30", `tipo` "desconto_percentual" |
      "desconto_valor", `valor`, `clientes_alvo`, `custo_maximo`,
@@ -234,6 +235,13 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   O formulário manual NÃO tem restrição de cardápio, de propósito: quem quer
   campanha em janela cheia usa ele. O editor é restrito porque existe para
   fazer yield.
+  **Gerar outras não repete.** A linha 3.5 do Gemini não aceita temperatura,
+  então a mesma entrada dá a mesma saída. `propostasRecentes` lê as
+  alternativas das últimas 3 gerações; elas vão ao modelo em
+  `propostas_ja_mostradas`, e uma alternativa com a mesma janela + segmento
+  (`chaveCombo`) de uma delas é descartada com o motivo. A regra fixa também
+  pula as já mostradas e deixa `frequenta_janela` por último (só canibaliza).
+  Passadas 3 gerações, as combinações podem voltar.
   O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
   Sem `GEMINI_API_KEY`, a tentativa registra o erro e vai direto à regra fixa.
 - **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
@@ -333,6 +341,15 @@ com `clientes.visitas` e `ultima_visita`; cada resgate grava mais uma.
 Seed: 60 de terça à noite, 120 de outras janelas (visita nos últimos 56 dias),
 150 só delivery (`visitas = 0`, `ultima_visita` null), 70 sumidos (última
 visita entre 61 e 240 dias atrás).
+
+Histórico do seed (`lib/seed-historico.ts`): duas campanhas encerradas na
+terça de 15 a 21 dias atrás, Ter 18h–23h. Uma para `delivery_nunca_veio`
+(15%, 50 emitidos, 9 resgates incrementais, kit entregue) e outra para
+`frequenta_janela` (10%, 30 emitidos, 10 resgates canibalizados, kit não
+entregue). Quem resgatou ganha a visita daquele dia, como no resgate real; por
+isso 9 clientes de delivery passam a contar em "já vem nesse horário". O painel
+"Telefones de teste" lista também quem já usou o benefício, para mostrar a
+resposta "já usado" no salão.
 
 ### campanhas
 | coluna | tipo | nota |

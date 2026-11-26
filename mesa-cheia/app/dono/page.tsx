@@ -13,7 +13,7 @@ import { NOMES_DIA, formatarDataCurta, formatarHora, formatarMoeda, horaDoTime, 
 import type { Regras } from "@/lib/campanha";
 import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
-import { carregarPainel, type CampanhaPainel, type TelefoneTeste } from "@/lib/painel";
+import { carregarPainel, type CampanhaPainel, type TelefoneResgatado, type TelefoneTeste } from "@/lib/painel";
 import { textoBeneficio } from "@/lib/campanha";
 import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
@@ -25,7 +25,8 @@ const OCUPACAO_MIN_PADRAO = 50;
 const fmt = new Intl.NumberFormat("pt-BR");
 const fmtData = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
 
-export default async function Dono() {
+export default async function Dono({ searchParams }: { searchParams: Promise<{ regras?: string }> }) {
+  const abrirRegras = (await searchParams).regras === "1";
   let resumo: ResumoOcupacao | null = null;
   let limite = OCUPACAO_MIN_PADRAO;
   let painel: Awaited<ReturnType<typeof carregarPainel>> | null = null;
@@ -127,7 +128,7 @@ export default async function Dono() {
                 </section>
               )}
               {regrasInfo && (
-                <details className="cartao-painel recolhivel-cartao">
+                <details className="cartao-painel recolhivel-cartao" id="regras" open={abrirRegras}>
                   <summary>
                     <h2>Regras</h2>
                     <span className="legenda">
@@ -150,7 +151,7 @@ export default async function Dono() {
 
         {planejamentos.length > 0 && <RegistroPlanejador planos={planejamentos} />}
 
-        {painel && <TelefonesTeste telefones={painel.telefonesTeste} />}
+        {painel && <TelefonesTeste telefones={painel.telefonesTeste} jaResgataram={painel.jaResgataram} />}
       </main>
     </>
   );
@@ -196,6 +197,9 @@ function Indicadores({
           <span style={{ width: `${usado}%` }} />
         </div>
         <span className="kpi-nota">restantes de {formatarMoeda(regras.teto_mes).replace(",00", "")}</span>
+        <a className="kpi-acao" href="?regras=1#regras">
+          Alterar teto do mês
+        </a>
       </div>
       <div className="kpi">
         <span className="kpi-rotulo">Resgates</span>
@@ -419,7 +423,7 @@ function RegistroPlanejador({ planos }: { planos: PlanejamentoView[] }) {
   );
 }
 
-function TelefonesTeste({ telefones }: { telefones: TelefoneTeste[] }) {
+function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[]; jaResgataram: TelefoneResgatado[] }) {
   return (
     <details className="demo-cartao">
       <summary>
@@ -432,6 +436,7 @@ function TelefonesTeste({ telefones }: { telefones: TelefoneTeste[] }) {
           regenerados a partir do seed. Digite um deles na <Link href="/salao">tela do salão</Link>. Qualquer número
           fora da lista mostra a resposta “sem benefício”.
         </p>
+        <h3 className="demo-sub">Com benefício ativo</h3>
         {telefones.length === 0 ? (
           <p className="legenda">Nenhum benefício ativo agora. Crie uma campanha acima.</p>
         ) : (
@@ -447,6 +452,23 @@ function TelefonesTeste({ telefones }: { telefones: TelefoneTeste[] }) {
               </li>
             ))}
           </ul>
+        )}
+        {jaResgataram.length > 0 && (
+          <>
+            <h3 className="demo-sub">Já usaram o benefício · mostram a resposta “já usado”</h3>
+            <ul className="lista-telefones">
+              {jaResgataram.map((t) => (
+                <li key={t.telefone}>
+                  <span className="telefone">{t.telefone}</span>
+                  <span>{t.nome}</span>
+                  <span className="sub">
+                    {descricaoCampanha(t.campanha)} · {formatarDataCurta(t.campanha.data_janela)} · conta{" "}
+                    {formatarMoeda(t.valorConta)}, desconto {formatarMoeda(t.desconto)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </details>

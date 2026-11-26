@@ -16,6 +16,8 @@ import {
   propostaFallback,
   validarAlternativas,
   validarContraCardapio,
+  chaveCombo,
+  paraContrato,
   type Cardapio,
   type SaidaModelo,
 } from "./planejador-regras";
@@ -39,6 +41,7 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
 - justificativa: duas ou três frases em português do Brasil, citando a ocupação média da janela e por que esse segmento. Use só números que aparecem na entrada.
 
 Clientes do segmento frequenta_janela já vêm nesse horário; um benefício para eles quase nunca traz cliente a mais.
+Se a entrada tiver "propostas_ja_mostradas", o dono já viu essas combinações e pediu outras: nenhuma das 3 pode repetir a mesma janela com o mesmo segmento de uma delas.
 Se a entrada tiver "erros_da_tentativa_anterior", corrija exatamente esses pontos.`;
 
 export type TentativaView = { numero: number; resposta: string | null; aprovada: boolean; erros: string[]; ms: number | null };
@@ -123,6 +126,11 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
   const base = await carregarBase(id);
   const cardapio = cardapioDaBase(base);
   const tentativas: TentativaView[] = [];
+
+  // "Gerar outras": o modelo não aceita mais temperatura, então mesma entrada dá a mesma
+  // saída. Mandamos as combinações das últimas gerações e descartamos repetições.
+  const jaMostradasLista = await propostasRecentes(id);
+  const jaMostradas = new Set(jaMostradasLista.map(chaveCombo));
   let alternativas: Alternativa[] = [];
   let origem: PlanejamentoView["origem"] = "modelo";
   let motivo: string | null = null;
@@ -134,7 +142,11 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
     let errosAnteriores: string[] = [];
     for (let n = 1; n <= MAX_TENTATIVAS && !alternativas.length; n++) {
       const t0 = Date.now();
-      const entrada = errosAnteriores.length ? { ...cardapio, erros_da_tentativa_anterior: errosAnteriores } : cardapio;
+      const entrada = {
+        ...cardapio,
+        ...(jaMostradasLista.length ? { propostas_ja_mostradas: jaMostradasLista.map(paraContrato) } : {}),
+        ...(errosAnteriores.length ? { erros_da_tentativa_anterior: errosAnteriores } : {}),
+      };
       let resposta: string | null = null;
       const erros: string[] = [];
       try {
@@ -142,6 +154,12 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
         const v = validarAlternativas(resposta, cardapio);
         erros.push(...v.erros);
         for (const alt of v.validas) {
+          if (jaMostradas.has(chaveCombo(alt.proposta))) {
+            erros.push(
+              `"${alt.saida.aposta}": repete a janela ${alt.saida.dia_semana} ${alt.saida.hora_inicio}–${alt.saida.hora_fim} com o segmento ${alt.proposta.segmento}, que o dono já viu; proponha outra combinação`,
+            );
+            continue;
+          }
           // Passou no cardápio; ainda passa por todas as regras de campanha.
           const av = avaliarProposta(alt.proposta, base);
           if (av.ok) alternativas.push(apresentar(alt.saida, alt.proposta, cardapio, []));
@@ -160,7 +178,7 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
 
     if (!alternativas.length) {
       origem = "fallback";
-      const fb = propostaFallback(cardapio);
+      const fb = propostaFallback(cardapio, jaMostradas);
       if (fb) {
         const av = avaliarProposta(fb.proposta, base);
         if (av.ok) alternativas = [apresentar(fb.saida, fb.proposta, cardapio, fb.notas)];
@@ -218,6 +236,20 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
     campanhaId: null,
     tentativas,
   };
+}
+
+const GERACOES_LEMBRADAS = 3;
+
+/** Alternativas das últimas gerações (qualquer status), para "Gerar outras" não repetir. */
+async function propostasRecentes(id: string): Promise<PropostaCampanha[]> {
+  const { data, error } = await supabaseServidor()
+    .from("planejamentos")
+    .select("proposta")
+    .eq("restaurante_id", id)
+    .order("criado_em", { ascending: false })
+    .limit(GERACOES_LEMBRADAS);
+  if (error) throw error;
+  return (data ?? []).flatMap((p) => (Array.isArray(p.proposta) ? (p.proposta as PropostaCampanha[]) : []));
 }
 
 /** Janelas candidatas cruas, para GET /api/janelas. */
