@@ -72,3 +72,29 @@ export function calcularOcupacao(
     cadeirasHoraVazias30d: vazias30,
   };
 }
+
+/**
+ * Turno (bloco contínuo de horas abertas) com menor ocupação média.
+ * Ex.: terça 18h–23h, 34%. Aritmética sobre a grade.
+ */
+export function janelaMaisVazia(
+  resumo: ResumoOcupacao,
+): { dia: number; inicio: number; fim: number; percentual: number } | null {
+  const turnos: number[][] = [];
+  for (const h of resumo.horas) {
+    const atual = turnos.at(-1);
+    if (atual && h === atual.at(-1)! + 1) atual.push(h);
+    else turnos.push([h]);
+  }
+  let melhor: { dia: number; inicio: number; fim: number; percentual: number } | null = null;
+  for (const dia of resumo.dias) {
+    for (const t of turnos) {
+      const cel = resumo.celulas.filter((c) => c.dia === dia && t.includes(c.hora));
+      if (!cel.length) continue;
+      const media = cel.reduce((s, c) => s + c.percentual, 0) / cel.length;
+      if (!melhor || media < melhor.percentual)
+        melhor = { dia, inicio: t[0], fim: t.at(-1)! + 1, percentual: Math.round(media * 10) / 10 };
+    }
+  }
+  return melhor;
+}

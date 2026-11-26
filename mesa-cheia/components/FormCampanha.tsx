@@ -91,16 +91,19 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
 
   return (
     <form className="form-campanha" onSubmit={salvar}>
-      <fieldset className="linha-campos">
-        <label>
-          Dia
-          <select value={dia} onChange={(e) => setDia(Number(e.target.value))}>
-            {dias.map((d) => (
-              <option key={d} value={d}>{NOMES_DIA[d]}</option>
-            ))}
-          </select>
-        </label>
-        <label>
+      <div className="campo">
+        <span id="rot-dia">Dia</span>
+        <div className="dias" role="group" aria-labelledby="rot-dia">
+          {dias.map((d) => (
+            <button key={d} type="button" className="opcao" aria-pressed={dia === d} onClick={() => setDia(d)}>
+              {NOMES_DIA[d]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="duas">
+        <label className="campo">
           Das
           <select
             value={inicio}
@@ -115,7 +118,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
             ))}
           </select>
         </label>
-        <label>
+        <label className="campo">
           Até
           <select value={fim} onChange={(e) => setFim(Number(e.target.value))}>
             {opcoesFim.map((h) => (
@@ -123,18 +126,27 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
             ))}
           </select>
         </label>
-      </fieldset>
+      </div>
 
       {ctx && (
         <p className="contexto">
-          Ocupação média nessa janela: <b>{ctx.ocupacaoJanela === null ? "sem histórico" : `${Math.round(ctx.ocupacaoJanela)}%`}</b>
-          {" · "}Benefícios valem <b>{ctx.validade}</b>
-          {" · "}Teto restante em {ctx.mes.split("-").reverse().join("/")}: <b>{formatarMoeda(Math.max(0, ctx.tetoRestanteMes))}</b>
+          <span>
+            Ocupação{" "}
+            <b className={ctx.ocupacaoJanela !== null && ctx.ocupacaoJanela < ctx.regras.ocupacao_min ? "alerta" : undefined}>
+              {ctx.ocupacaoJanela === null ? "sem histórico" : `${Math.round(ctx.ocupacaoJanela)}%`}
+            </b>
+          </span>
+          <span>
+            Vale <b>{ctx.validade}</b>
+          </span>
+          <span>
+            Teto restante <b>{formatarMoeda(Math.max(0, ctx.tetoRestanteMes))}</b>
+          </span>
         </p>
       )}
 
       <fieldset className="segmentos" aria-busy={carregandoCtx}>
-        <legend>Segmento</legend>
+        <legend className="campo">Segmento</legend>
         {SEGMENTOS.map((s) => {
           const c = ctx?.contagens[s.id];
           return (
@@ -144,8 +156,8 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
               <span className="segmento-contagem">
                 {c ? (
                   <>
-                    <b>{c.total}</b> clientes
-                    {c.elegiveis < c.total && <> · {c.elegiveis} elegíveis</>}
+                    <b>{c.total}</b>
+                    {c.elegiveis < c.total ? <> · {c.elegiveis} elegíveis</> : " clientes"}
                   </>
                 ) : (
                   "…"
@@ -156,25 +168,35 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
         })}
       </fieldset>
 
-      <fieldset className="linha-campos">
-        <label>
-          Benefício
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoBeneficio)}>
-            <option value="percentual">% de desconto na conta</option>
-            <option value="valor_fixo">R$ de desconto</option>
-          </select>
-        </label>
-        <label>
-          <span>
-            Valor {tipo === "percentual" ? "(%)" : "(R$)"} <small>{limite && `· ${limite}`}</small>
+      <div className="campo">
+        <span id="rot-tipo">Benefício</span>
+        <div className="alternador" role="group" aria-labelledby="rot-tipo">
+          <button type="button" aria-pressed={tipo === "percentual"} onClick={() => setTipo("percentual")}>
+            % da conta
+          </button>
+          <button type="button" aria-pressed={tipo === "valor_fixo"} onClick={() => setTipo("valor_fixo")}>
+            R$ fixo
+          </button>
+        </div>
+      </div>
+
+      <div className="duas">
+        <label className="campo">
+          Valor{limite && ` · ${limite}`}
+          <span className="entrada">
+            {tipo === "valor_fixo" && <span>R$</span>}
+            <input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} required />
+            {tipo === "percentual" && <span>%</span>}
           </span>
-          <input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} required />
         </label>
-        <label>
-          Teto de gasto (R$)
-          <input inputMode="decimal" value={teto} onChange={(e) => setTeto(e.target.value)} required />
+        <label className="campo">
+          Teto de gasto
+          <span className="entrada">
+            <span>R$</span>
+            <input inputMode="decimal" value={teto} onChange={(e) => setTeto(e.target.value)} required />
+          </span>
         </label>
-      </fieldset>
+      </div>
 
       <button className="botao primario" disabled={enviando}>
         {enviando ? "Emitindo…" : "Criar campanha e emitir benefícios"}

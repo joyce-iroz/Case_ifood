@@ -41,6 +41,13 @@ formulário faz. Nada fora do planejador pode saber quem criou a campanha.
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript, React 19. CSS puro em `app/globals.css`.
+- Visual "black": só tema escuro. Cores em variáveis no topo de `globals.css`:
+  `--vermelho` (#ff5a4e) para texto de destaque, `--vermelho-cheio` (#d92d20)
+  com texto branco para botões e a célula mais vazia, tons escuros de vermelho
+  para 30–50% de ocupação, cinzas para acima do mínimo, verde só para resultado
+  bom. Fontes do Google Fonts no `layout.tsx`: Space Grotesk (títulos, números),
+  Inter (texto), JetBrains Mono (telefones, códigos). Áreas de toque ≥ 44 px.
+  Referência visual: canvas https://claude.ai/artifact/RRqWUYvcyMKsoQt6jxycQn
 - Supabase (Postgres) via `@supabase/supabase-js`, só no servidor.
 - Deploy na Vercel.
 - Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (ver `.env.example`).
@@ -69,6 +76,7 @@ app/
   api/salao/aplicar      POST {beneficio_id, valor_conta}: resgate idempotente
 components/
   BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx   componentes de cliente
+  Marca.tsx              logo (server)
 lib/
   supabase/server.ts     cliente com service_role ("server-only")
   dados.ts               leituras no banco, paginar() ("server-only")

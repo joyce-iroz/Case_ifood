@@ -61,13 +61,16 @@ export function Salao() {
   }
 
   const emResposta = estado.fase === "resposta" || estado.fase === "aplicado";
+  const ativo = estado.fase === "resposta" && estado.r.tipo === "ativo";
 
   return (
     <div className="salao">
-      <div className={`visor ${digitos.length === 11 ? "completo" : ""}`} aria-label="Telefone digitado, mascarado">
-        {mascararTelefone(digitos)}
-      </div>
+      {!emResposta && <p className="visor-rotulo">Telefone do cliente</p>}
+      <Visor digitos={digitos} compacto={emResposta} />
 
+      {estado.fase === "digitando" && digitos.length < 11 && (
+        <p className="salao-status">A busca começa sozinha no 11º dígito</p>
+      )}
       {estado.fase === "consultando" && <p className="salao-status">Consultando…</p>}
       {estado.fase === "falha" && (
         <p className="salao-status">
@@ -87,7 +90,7 @@ export function Salao() {
 
       {estado.fase === "resposta" && estado.r.tipo === "nenhum" && (
         <div className="cartao neutro">
-          <p className="cartao-linha">Nenhum benefício ativo para este telefone.</p>
+          <p>Nenhum benefício ativo para este telefone.</p>
         </div>
       )}
 
@@ -103,22 +106,62 @@ export function Salao() {
 
       {estado.fase === "aplicado" && (
         <div className="cartao aplicado">
-          <p className="cartao-nome">{estado.nome}</p>
-          <p className="cartao-destaque">Cobrar {formatarMoeda(estado.r.aPagar)}</p>
-          <p className="cartao-linha">
-            Conta {formatarMoeda(estado.r.valorConta)} − desconto {formatarMoeda(estado.r.desconto)}.
-            {!estado.r.novo && " Este resgate já estava registrado; nada foi duplicado."}
-          </p>
+          <div className="aplicado-cabeca">
+            <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true">
+              <circle cx="14" cy="14" r="13" fill="none" stroke="#5bd08a" strokeWidth="2" />
+              <path d="M8.5 14.5l3.8 3.8 7.2-8" fill="none" stroke="#5bd08a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Aplicado · {estado.nome}</span>
+          </div>
+          <div className="aplicado-valor">
+            <span>Cobrar</span>
+            <b>{formatarMoeda(estado.r.aPagar)}</b>
+          </div>
+          <div className="aplicado-detalhe">
+            <div>
+              <span>Conta</span>
+              <b>{formatarMoeda(estado.r.valorConta)}</b>
+            </div>
+            <div>
+              <span>Desconto</span>
+              <b>− {formatarMoeda(estado.r.desconto)}</b>
+            </div>
+          </div>
+          {!estado.r.novo && <p className="cartao-linha" style={{ color: "var(--verde-suave)" }}>Este resgate já estava registrado; nada foi duplicado.</p>}
         </div>
       )}
 
-      {emResposta ? (
-        <button className="botao-grande" onClick={novoAtendimento}>
+      {!emResposta && (
+        <>
+          <div className="espaco" />
+          <Teclado aoTeclar={tecla} desativado={estado.fase === "consultando"} />
+        </>
+      )}
+
+      {emResposta && !ativo && <div className="espaco" />}
+      {emResposta && (
+        <button
+          className={`botao-grande ${estado.fase === "aplicado" ? "claro" : ""}`}
+          onClick={novoAtendimento}
+        >
           Novo atendimento
         </button>
-      ) : (
-        <Teclado aoTeclar={tecla} desativado={estado.fase === "consultando"} />
       )}
+    </div>
+  );
+}
+
+/** Mostra a máscara com os dígitos ocultos apagados e o próximo dígito em vermelho. */
+function Visor({ digitos, compacto }: { digitos: string; compacto: boolean }) {
+  const mascara = mascararTelefone(digitos);
+  const primeiroVazio = mascara.indexOf("_");
+  return (
+    <div className={`visor ${compacto ? "compacto" : ""}`} aria-label={`Telefone, ${digitos.length} de 11 dígitos`}>
+      {[...mascara].map((ch, i) => (
+        <span key={i} className={ch === "•" ? "oculto" : ch === "_" ? (i === primeiroVazio ? "falta" : "oculto") : undefined}>
+          {ch}
+        </span>
+      ))}
     </div>
   );
 }
@@ -182,41 +225,53 @@ function CartaoAtivo({
   }
 
   return (
-    <div className="cartao ativo">
-      <p className="cartao-nome">{r.nome}</p>
-      <p className="cartao-destaque">{r.beneficio}</p>
-      <p className="cartao-linha">
-        Vale {r.validade} · código {r.codigo}
-      </p>
-      {r.antesDaJanela && <p className="cartao-demo">Demo: aceito antes da janela.</p>}
+    <>
+      <div className="cartao ativo">
+        <div>
+          <div className="cartao-topo">
+            <p className="cartao-nome">{r.nome}</p>
+            {r.antesDaJanela && <p className="cartao-demo">demo: antes da janela</p>}
+          </div>
+          <p className="cartao-destaque">{r.beneficio}</p>
+          <p className="cartao-linha">
+            Vale {r.validade} · código <b className="mono">{r.codigo}</b>
+          </p>
+        </div>
 
-      <label className="campo-conta">
-        Valor da conta
-        <span className="campo-moeda">
-          R$
-          <input
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0,00"
-            value={conta}
-            onChange={(e) => setConta(e.target.value.replace(/[^\d,.]/g, ""))}
-            autoFocus
-          />
-        </span>
-      </label>
+        <label className="campo-conta">
+          Valor da conta
+          <span className="campo-moeda">
+            <span>R$</span>
+            <input
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
+              value={conta}
+              onChange={(e) => setConta(e.target.value.replace(/[^\d,.]/g, ""))}
+              autoFocus
+            />
+          </span>
+        </label>
 
-      {valorConta > 0 && (
-        <p className="cartao-linha">
-          Desconto {formatarMoeda(previa.desconto)} · cobrar <b>{formatarMoeda(valorConta - previa.desconto)}</b>
-          {previa.limitadoPor === "desconto_max" && ` (limitado a ${r.calculo.descontoMax}% da conta)`}
-          {previa.limitadoPor === "teto" && " (limitado pelo teto da campanha)"}
-        </p>
-      )}
+        <div className="parciais">
+          <div>
+            <span>Desconto</span>
+            <b>{valorConta > 0 ? formatarMoeda(previa.desconto) : "—"}</b>
+            {previa.limitadoPor === "desconto_max" && <small>limitado a {r.calculo.descontoMax}% da conta</small>}
+            {previa.limitadoPor === "teto" && <small>limitado pelo teto da campanha</small>}
+          </div>
+          <div>
+            <span>Cobrar</span>
+            <b>{valorConta > 0 ? formatarMoeda(valorConta - previa.desconto) : "—"}</b>
+          </div>
+        </div>
+        {erro && <p className="salao-status">{erro}</p>}
+      </div>
 
+      <div className="espaco" />
       <button className="botao-grande primario" onClick={aplicar} disabled={!podeAplicar}>
         {enviando ? "Aplicando…" : "Aplicar"}
       </button>
-      {erro && <p className="salao-status">{erro}</p>}
-    </div>
+    </>
   );
 }
