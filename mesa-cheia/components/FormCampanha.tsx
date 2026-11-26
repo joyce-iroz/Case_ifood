@@ -31,6 +31,14 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
   const versao = useRef(0);
   const primeira = useRef(true);
 
+  // Depois de router.refresh() (campanha criada aqui ou pelo planejador), o servidor manda
+  // um contexto novo; se a janela mostrada é a inicial, usa os números atualizados.
+  useEffect(() => {
+    if (contextoInicial && dia === janelaInicial.dia && inicio === janelaInicial.inicio && fim === janelaInicial.fim)
+      setCtx(contextoInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextoInicial]);
+
   const opcoesFim = [...horas.map((h) => h + 1), fecha].filter((h, i, a) => h > inicio && a.indexOf(h) === i);
 
   async function buscarContexto() {

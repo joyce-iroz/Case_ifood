@@ -3,8 +3,12 @@ import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
 import { FormCampanha } from "@/components/FormCampanha";
+import { FormRegras } from "@/components/FormRegras";
+import { Planejador } from "@/components/Planejador";
+import { Tentativas } from "@/components/Tentativas";
+import { listarPlanejamentos, type PlanejamentoView } from "@/lib/planejador";
 import { carregarRegras, carregarRestaurante, obterResumoOcupacao } from "@/lib/dados";
-import { NOMES_DIA, formatarDataCurta, formatarMoeda, horaDoTime, horasDeFuncionamento, type Restaurante } from "@/lib/dominio";
+import { NOMES_DIA, formatarDataCurta, formatarHora, formatarMoeda, horaDoTime, horasDeFuncionamento, type Restaurante } from "@/lib/dominio";
 import type { Regras } from "@/lib/campanha";
 import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
@@ -27,16 +31,19 @@ export default async function Dono() {
   let falha: string | null = null;
   let restauranteInfo: Restaurante | null = null;
   let regrasInfo: Regras | null = null;
+  let planejamentos: PlanejamentoView[] = [];
 
   try {
     const restaurante = await carregarRestaurante();
     const janela = { dia: 2, inicio: 18, fim: 23 }; // terça à noite: a janela mais vazia da demo
-    const [r, regras, p, ctx] = await Promise.all([
+    const [r, regras, p, ctx, planos] = await Promise.all([
       obterResumoOcupacao(undefined, restaurante),
       carregarRegras(),
       carregarPainel(),
       contextoDaJanela(janela),
+      listarPlanejamentos(10),
     ]);
+    planejamentos = planos;
     resumo = r;
     restauranteInfo = restaurante;
     regrasInfo = regras;
@@ -92,22 +99,41 @@ export default async function Dono() {
         )}
 
         {resumo && resumo.celulas.length > 0 && (
+          <section className="cartao-painel" aria-labelledby="t-plan">
+            <Planejador inicial={planejamentos.find((x) => x.status === "proposta") ?? null} />
+          </section>
+        )}
+
+        {resumo && resumo.celulas.length > 0 && (
           <div className="duas-colunas">
             <section className="cartao-painel ocupacao" aria-labelledby="t-ocup">
               <Grade resumo={resumo} limite={limite} />
             </section>
-            {form && (
-              <section className="cartao-painel campanha" aria-labelledby="t-camp">
-                <h2 id="t-camp">Nova campanha</h2>
-                <FormCampanha
-                  dias={form.dias}
-                  horas={form.horas}
-                  fecha={form.fecha}
-                  janelaInicial={form.janela}
-                  contextoInicial={form.ctx}
-                />
-              </section>
-            )}
+            <div className="coluna-direita">
+              {form && (
+                <section className="cartao-painel" aria-labelledby="t-camp">
+                  <h2 id="t-camp">Nova campanha manual</h2>
+                  <FormCampanha
+                    dias={form.dias}
+                    horas={form.horas}
+                    fecha={form.fecha}
+                    janelaInicial={form.janela}
+                    contextoInicial={form.ctx}
+                  />
+                </section>
+              )}
+              {regrasInfo && (
+                <details className="cartao-painel recolhivel-cartao">
+                  <summary>
+                    <h2>Regras</h2>
+                    <span className="legenda">
+                      desconto até {fmt.format(regrasInfo.desconto_max)}% · teto {formatarMoeda(regrasInfo.teto_mes)}
+                    </span>
+                  </summary>
+                  <FormRegras regras={regrasInfo} />
+                </details>
+              )}
+            </div>
           </div>
         )}
 
@@ -117,6 +143,8 @@ export default async function Dono() {
             <Resultados campanhas={painel.campanhas} />
           </section>
         )}
+
+        {planejamentos.length > 0 && <RegistroPlanejador planos={planejamentos} />}
 
         {painel && <TelefonesTeste telefones={painel.telefonesTeste} />}
       </main>
@@ -177,7 +205,7 @@ function Indicadores({
 }
 
 function descricaoCampanha(c: CampanhaPainel["campanha"]) {
-  return `${NOMES_DIA[c.dia_semana]} ${c.hora_inicio}h–${c.hora_fim}h`;
+  return `${NOMES_DIA[c.dia_semana]} ${formatarHora(c.hora_inicio)}–${formatarHora(c.hora_fim)}`;
 }
 
 function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
@@ -271,6 +299,54 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
         </details>
       ))}
     </>
+  );
+}
+
+const STATUS_PLANO: Record<PlanejamentoView["status"], string> = {
+  proposta: "aguardando decisão",
+  aprovada: "aprovada",
+  descartada: "descartada",
+  sem_proposta: "sem proposta",
+};
+
+/** Auditoria: cada clique em "Gerar proposta" e cada resposta do modelo, com o motivo da reprovação. */
+function RegistroPlanejador({ planos }: { planos: PlanejamentoView[] }) {
+  const dataHora = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <section className="cartao-painel" aria-labelledby="t-reg">
+      <div className="cabecalho-cartao">
+        <h2 id="t-reg">Registro do planejador</h2>
+        <span className="legenda">últimas {planos.length} propostas · lista crua das janelas em <a href="/api/janelas">/api/janelas</a></span>
+      </div>
+      {planos.map((p) => {
+        const ap = p.apresentacao && !("motivo" in p.apresentacao && p.apresentacao.motivo) ? p.apresentacao : null;
+        const aprovadas = p.tentativas.filter((t) => t.aprovada).length;
+        return (
+          <details key={p.id} className="recolhivel">
+            <summary>
+              <span>
+                {dataHora.format(new Date(p.criadoEm))} ·{" "}
+                {ap && "janela" in ap ? `${ap.janela} · ${ap.beneficio}` : "sem proposta"}
+              </span>
+              <span className="qtd">
+                {p.origem === "fallback" ? "regra fixa" : p.origem === "modelo" ? "modelo" : "—"} · {p.tentativas.length}{" "}
+                {p.tentativas.length === 1 ? "tentativa" : "tentativas"} ({aprovadas} passou) · {STATUS_PLANO[p.status]}
+                {p.valorAprovado !== null && ` · valor ajustado para ${p.valorAprovado}`}
+              </span>
+            </summary>
+            <div className="rolagem">
+              <Tentativas tentativas={p.tentativas} />
+            </div>
+          </details>
+        );
+      })}
+    </section>
   );
 }
 

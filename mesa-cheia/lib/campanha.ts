@@ -3,6 +3,7 @@
 import {
   agoraNoFuso,
   diaDaSemana,
+  formatarHora,
   formatarMoeda,
   horasDeFuncionamento,
   instanteNoFuso,
@@ -21,8 +22,8 @@ export const ehTipo = (x: unknown): x is TipoBeneficio => x === "percentual" || 
  */
 export type PropostaCampanha = {
   dia_semana: number;  // 0 = domingo
-  hora_inicio: number; // hora cheia
-  hora_fim: number;    // hora cheia, exclusiva
+  hora_inicio: number; // horas; meia hora como ,5 (18.5 = 18h30)
+  hora_fim: number;    // exclusiva
   segmento: Segmento;
   tipo: TipoBeneficio;
   valor: number;       // % da conta (percentual) ou R$ (valor_fixo)
@@ -56,8 +57,9 @@ export function lerProposta(x: unknown): { proposta: PropostaCampanha } | { bloq
   };
   const erros: string[] = [];
   if (!Number.isInteger(p.dia_semana) || p.dia_semana < 0 || p.dia_semana > 6) erros.push("dia da semana inválido");
-  if (!Number.isInteger(p.hora_inicio) || !Number.isInteger(p.hora_fim) || p.hora_fim <= p.hora_inicio)
-    erros.push("faixa de horas inválida");
+  const meiaHora = (h: number) => Number.isInteger(h * 2) && h >= 0 && h <= 24;
+  if (!meiaHora(p.hora_inicio) || !meiaHora(p.hora_fim) || p.hora_fim <= p.hora_inicio)
+    erros.push("faixa de horas inválida (use horas cheias ou meia hora)");
   if (!ehSegmento(p.segmento)) erros.push("segmento inválido");
   if (!ehTipo(p.tipo)) erros.push("tipo de benefício inválido");
   if (!Number.isFinite(p.valor) || p.valor <= 0) erros.push("valor do benefício precisa ser maior que zero");
@@ -92,11 +94,11 @@ export function validarProposta(
     bloqueios.push({ regra: "janela", mensagem: `O restaurante não abre ${nomeDiaLongo(p.dia_semana)}.` });
   } else {
     const fora: number[] = [];
-    for (let h = p.hora_inicio; h < p.hora_fim; h++) if (!horas.includes(h)) fora.push(h);
+    for (let h = Math.floor(p.hora_inicio); h < Math.ceil(p.hora_fim); h++) if (!horas.includes(h)) fora.push(h);
     if (fora.length)
       bloqueios.push({
         regra: "janela",
-        mensagem: `A janela inclui horário em que o salão está fechado (${fora.map((h) => `${h}h`).join(", ")}).`,
+        mensagem: `A janela inclui horário em que o salão está fechado (${fora.map(formatarHora).join(", ")}).`,
       });
   }
 
@@ -136,7 +138,7 @@ export function validarProposta(
 export function proximaJanela(janela: Janela, agora = agoraNoFuso()) {
   let data = agora.data;
   let dias = (janela.dia - diaDaSemana(data) + 7) % 7;
-  if (dias === 0 && agora.hora >= janela.fim) dias = 7;
+  if (dias === 0 && agora.hora + agora.minuto / 60 >= janela.fim) dias = 7;
   data = somarDias(data, dias);
   return { data, valido_de: instanteNoFuso(data, janela.inicio), valido_ate: instanteNoFuso(data, janela.fim) };
 }

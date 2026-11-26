@@ -208,3 +208,25 @@ export async function expirarVencidos() {
     .lt("valido_ate", new Date().toISOString());
   if (error) throw error;
 }
+
+/** Atualiza as regras. Valida faixa de cada campo; o resto do sistema lê daqui. */
+export async function atualizarRegras(entrada: unknown, id = RESTAURANTE_DEMO_ID) {
+  const o = (entrada ?? {}) as Record<string, unknown>;
+  const n = (k: string) => Number(o[k]);
+  const regras = {
+    teto_mes: n("teto_mes"),
+    desconto_max: n("desconto_max"),
+    dias_entre_ofertas: n("dias_entre_ofertas"),
+    ocupacao_min: n("ocupacao_min"),
+  };
+  const erros: string[] = [];
+  if (!(regras.teto_mes >= 0 && regras.teto_mes <= 1_000_000)) erros.push("teto do mês entre 0 e 1.000.000");
+  if (!(regras.desconto_max >= 0 && regras.desconto_max <= 100)) erros.push("desconto máximo entre 0% e 100%");
+  if (!(Number.isInteger(regras.dias_entre_ofertas) && regras.dias_entre_ofertas >= 0 && regras.dias_entre_ofertas <= 365))
+    erros.push("dias entre ofertas: inteiro entre 0 e 365");
+  if (!(regras.ocupacao_min >= 0 && regras.ocupacao_min <= 100)) erros.push("ocupação mínima entre 0% e 100%");
+  if (erros.length) return { ok: false as const, erros };
+  const { error } = await supabaseServidor().from("regras").update(regras).eq("restaurante_id", id);
+  if (error) throw error;
+  return { ok: true as const, regras };
+}

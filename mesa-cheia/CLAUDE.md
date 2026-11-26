@@ -30,13 +30,14 @@ ticket médio R$ 78, terça a domingo, 11h–15h e 18h–23h), com id fixo
 
 ## Estado atual
 
-Feito, sem IA: schema, seed (`POST /api/reset`), grade de ocupação, criação
-de campanha por formulário com emissão de benefícios, tela do salão (consulta
-por telefone e resgate), resultado por campanha e painel "Telefones de teste".
+Feito: schema, seed (`POST /api/reset`), grade de ocupação, criação de
+campanha por formulário com emissão de benefícios, tela do salão (consulta por
+telefone e resgate), resultado por campanha, painel "Telefones de teste",
+editor de regras e o planejador de campanhas com IA (Gemini Flash-Lite).
 
-Próximo passo: planejador de campanhas com IA. Ele deve produzir uma
-`PropostaCampanha` e entregá-la a `criarCampanha`, exatamente como o
-formulário faz. Nada fora do planejador pode saber quem criou a campanha.
+O planejador é o único ponto com IA. Ele produz uma `PropostaCampanha` e, ao
+aprovar, chama `criarCampanha`, exatamente como o formulário. Nada fora do
+planejador sabe quem criou a campanha.
 
 ## Stack
 
@@ -50,7 +51,10 @@ formulário faz. Nada fora do planejador pode saber quem criou a campanha.
   Referência visual: canvas https://claude.ai/artifact/RRqWUYvcyMKsoQt6jxycQn
 - Supabase (Postgres) via `@supabase/supabase-js`, só no servidor.
 - Deploy na Vercel.
-- Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (ver `.env.example`).
+- Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `GEMINI_API_KEY`, opcional `GEMINI_MODEL` (padrão `gemini-3.5-flash-lite`)
+  (ver `.env.example`). `GEMINI_API_URL` existe só para apontar a um Gemini
+  falso em teste local.
 
 ## Comandos
 
@@ -67,15 +71,21 @@ npm run check:seed   # imprime a grade gerada pelo seed, sem banco
 app/
   page.tsx               seletor de papel
   dono/page.tsx          grade de ocupação (server component)
-  salao/page.tsx         placeholder
+  salao/page.tsx         teclado do salão
   api/reset/route.ts     POST: apaga tudo e popula de novo
   api/ocupacao/route.ts  GET: médias por dia da semana × hora
   api/segmentos/route.ts GET: contagem por segmento + contexto da janela
   api/campanhas/route.ts POST: PropostaCampanha → valida, grava, emite
   api/salao/consultar    POST {telefone}: ativo | nenhum | resgatado
   api/salao/aplicar      POST {beneficio_id, valor_conta}: resgate idempotente
+  api/janelas            GET: janelas candidatas cruas + cardápio enviado ao modelo
+  api/planejador         GET: registro de auditoria · POST: gera proposta
+  api/planejador/[id]/aprovar    POST {valor?}: criarCampanha com a proposta gravada
+  api/planejador/[id]/descartar  POST
+  api/regras             GET / PATCH
 components/
-  BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx   componentes de cliente
+  BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx   cliente
+  Tentativas.tsx         lista de tentativas do modelo (sem estado)
   Marca.tsx              logo (server)
 lib/
   supabase/server.ts     cliente com service_role ("server-only")
@@ -84,6 +94,10 @@ lib/
   resgate.ts             consultarTelefone, aplicarBeneficio ("server-only")
   painel.ts              resultado por campanha, telefones de teste ("server-only")
   campanha.ts            PropostaCampanha, regras, desconto, códigos (puro)
+  janelas.ts             janelas candidatas (puro)
+  planejador-regras.ts   cardápio, validação da saída do modelo, regra fixa (puro)
+  planejador.ts          gerar/aprovar/descartar/listar ("server-only")
+  gemini.ts              chamada REST ao Gemini ("server-only")
   segmentos.ts           segmentos e visitouNaJanela (puro)
   resultados.ts          métricas por campanha (puro)
   ocupacao.ts            cálculo da grade (puro)
@@ -177,6 +191,34 @@ supabase/schema.sql      colar no SQL Editor do Supabase
 - **Telefones de teste** (painel do dono) são regenerados do seed em memória
   (`gerarClientesCompletos`); o banco continua só com hash e 4 últimos
   dígitos. Os telefones do seed não dependem da data.
+- **Planejador (IA).** A IA não calcula número e não decide dinheiro.
+  1. Código calcula as janelas candidatas (`calcularCandidatas`): de 1h a 3h,
+     em passos de 30 min, sem os primeiros e últimos 30 min de cada turno,
+     toda meia hora abaixo de `ocupacao_min`, ordenadas por cadeiras-hora
+     vazias absolutas. As 12 primeiras vão ao modelo.
+  2. Código monta o cardápio (`montarCardapio`): por janela, elegíveis por
+     segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`); valores
+     permitidos por tipo (`opcoesValor`, todos ≤ `desconto_max`).
+  3. O modelo devolve o JSON do contrato (`dia_semana` "terca", `hora_inicio`
+     "18:30", `tipo` "desconto_percentual" | "desconto_valor", `valor`,
+     `clientes_alvo`, `custo_maximo`, `justificativa`).
+  4. `validarSaida` confere tudo contra o cardápio; depois `avaliarProposta`
+     aplica as mesmas regras do formulário. Reprovou: chama de novo com os
+     erros, até 3 vezes. Depois, `propostaFallback`: janela com mais cadeiras
+     vazias, segmento com mais elegíveis, 10% (ou o máximo permitido, se
+     menor), metade do saldo do mês como teto. `origem` = `fallback`.
+  5. Cada tentativa vai para `planejamento_tentativas` (resposta crua, passou,
+     erros). Só uma proposta fica aguardando decisão; gerar outra descarta a
+     anterior.
+  6. Aprovar usa a proposta gravada no banco (não a do navegador), aplica o
+     valor ajustado e chama `criarCampanha`. Se bloquear, a proposta volta a
+     aguardar decisão.
+  O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
+  Sem `GEMINI_API_KEY`, a tentativa registra o erro e vai direto à regra fixa.
+- **Janelas em meia hora.** `hora_inicio`/`hora_fim` são números em horas com
+  ,5 para meia hora (18.5 = 18h30); `timeDaHora`/`horaDoTime`/`formatarHora`
+  convertem. Uma visita registrada na hora cheia h conta para a janela se a
+  hora h–h+1 encosta nela.
 - Identificadores de domínio em português, sem acento no código
   (`ocupacao`, `beneficio`); texto de interface em português com acento.
 - Schema mudou? Atualize `supabase/schema.sql` (ele derruba e recria tudo) e a
@@ -303,6 +345,32 @@ visita entre 61 e 240 dias atrás).
 | desconto_max | numeric(5,2) | % da conta; seed 20 |
 | dias_entre_ofertas | integer | seed 15 |
 | ocupacao_min | numeric(5,2) | % da capacidade; abaixo disso a janela é "vazia"; seed 50 |
+
+### planejamentos
+| coluna | tipo | nota |
+|---|---|---|
+| id | uuid pk | um clique em "Gerar proposta" |
+| restaurante_id | uuid fk → restaurantes, cascade | |
+| criado_em | timestamptz | |
+| origem | text | `modelo` \| `fallback` \| `nenhuma` |
+| modelo | text null | id do modelo chamado |
+| proposta | jsonb null | PropostaCampanha validada |
+| apresentacao | jsonb | o que o cartão mostra (ou `{motivo}`) |
+| status | text | `proposta` \| `aprovada` \| `descartada` \| `sem_proposta` |
+| valor_aprovado | numeric null | valor após "Ajustar valor" |
+| campanha_id | uuid null fk → campanhas, set null | só auditoria |
+| decidido_em | timestamptz null | |
+
+### planejamento_tentativas
+| coluna | tipo | nota |
+|---|---|---|
+| id | bigint identity pk | |
+| planejamento_id | uuid fk → planejamentos, cascade | |
+| numero | smallint | 1 a 3; único por planejamento |
+| resposta | text null | texto cru do modelo |
+| aprovada | boolean | passou na validação |
+| erros | jsonb | frases que reprovaram (voltam ao modelo) |
+| ms | integer | duração da chamada |
 
 ### Função `resgatar_beneficio`
 `(p_beneficio_id, p_valor_conta, p_desconto, p_incremental, p_data, p_hora) → jsonb`.

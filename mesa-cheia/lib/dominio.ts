@@ -72,12 +72,21 @@ export function agoraNoFuso(agora = new Date()): { data: string; hora: number; m
  * São Paulo está em UTC−3 o ano todo desde 2019 (sem horário de verão).
  */
 export function instanteNoFuso(data: string, hora: number): string {
-  if (hora === 24) return instanteNoFuso(somarDias(data, 1), 0);
-  return `${data}T${String(hora).padStart(2, "0")}:00:00-03:00`;
+  if (hora >= 24) return instanteNoFuso(somarDias(data, 1), hora - 24);
+  return `${data}T${timeDaHora(hora)}-03:00`;
 }
 
-export const horaDoTime = (t: string) => Number(t.slice(0, 2));
-export const timeDaHora = (h: number) => `${String(h).padStart(2, "0")}:00:00`;
+/** Horas como número, meia hora como ,5: "18:30:00" → 18.5. */
+export const horaDoTime = (t: string) => Number(t.slice(0, 2)) + Number(t.slice(3, 5) || 0) / 60;
+export const timeDaHora = (h: number) => {
+  const min = Math.round((h % 1) * 60);
+  return `${String(Math.floor(h)).padStart(2, "0")}:${String(min).padStart(2, "0")}:00`;
+};
+/** "18h" ou "18h30". */
+export const formatarHora = (h: number) => {
+  const min = Math.round((h % 1) * 60);
+  return min ? `${Math.floor(h)}h${String(min).padStart(2, "0")}` : `${h}h`;
+};
 
 const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 export const formatarMoeda = (v: number) => moeda.format(v);
@@ -93,5 +102,5 @@ export function formatarDataCurta(data: string): string {
 
 /** "ter 01/12, 18h–23h" */
 export function formatarJanela(data: string, inicio: number, fim: number): string {
-  return `${formatarDataCurta(data)}, ${inicio}h–${fim}h`;
+  return `${formatarDataCurta(data)}, ${formatarHora(inicio)}–${formatarHora(fim)}`;
 }

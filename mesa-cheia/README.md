@@ -20,4 +20,6 @@ npm run dev
 
 4. Abra `/dono` e clique em "Resetar demo" (ou rode `curl -X POST http://localhost:3000/api/reset`).
 
-Na Vercel, cadastre as mesmas duas variáveis em Settings → Environment Variables.
+Na Vercel, cadastre as variáveis em Settings → Environment Variables:
+`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `GEMINI_API_KEY`
+(sem a do Gemini, o planejador funciona só pela regra fixa).

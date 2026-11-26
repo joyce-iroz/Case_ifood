@@ -4,6 +4,8 @@
 -- Depois, popule com POST /api/reset (ou o botão "Resetar demo").
 
 drop function if exists resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint);
+drop table if exists planejamento_tentativas cascade;
+drop table if exists planejamentos cascade;
 drop table if exists resgates   cascade;
 drop table if exists beneficios cascade;
 drop table if exists campanhas  cascade;
@@ -117,6 +119,36 @@ create table resgates (
 );
 create index resgates_criado_idx on resgates (criado_em);  -- consumo do teto_mes
 
+-- Planejador de campanhas (IA). Só auditoria: campanhas não sabem quem as criou.
+-- Um planejamento é um clique em "Gerar proposta"; cada chamada ao modelo é uma tentativa.
+create table planejamentos (
+  id              uuid primary key default gen_random_uuid(),
+  restaurante_id  uuid not null references restaurantes(id) on delete cascade,
+  criado_em       timestamptz not null default now(),
+  origem          text not null check (origem in ('modelo', 'fallback', 'nenhuma')),
+  modelo          text,                       -- id do modelo chamado
+  proposta        jsonb,                      -- PropostaCampanha validada (null se nenhuma)
+  apresentacao    jsonb,                      -- o que o cartão mostra: justificativa, janela, contagens
+  status          text not null default 'proposta'
+                    check (status in ('proposta', 'aprovada', 'descartada', 'sem_proposta')),
+  valor_aprovado  numeric(10,2),              -- valor após "Ajustar valor", se mudou
+  campanha_id     uuid references campanhas(id) on delete set null,
+  decidido_em     timestamptz
+);
+create index planejamentos_restaurante_idx on planejamentos (restaurante_id, criado_em desc);
+
+create table planejamento_tentativas (
+  id               bigint generated always as identity primary key,
+  planejamento_id  uuid not null references planejamentos(id) on delete cascade,
+  numero           smallint not null,
+  resposta         text,                      -- texto cru devolvido pelo modelo (ou erro da chamada)
+  aprovada         boolean not null,
+  erros            jsonb not null default '[]',
+  ms               integer,
+  criado_em        timestamptz not null default now(),
+  unique (planejamento_id, numero)
+);
+
 create table regras (
   restaurante_id      uuid primary key references restaurantes(id) on delete cascade,
   teto_mes            numeric(10,2) not null check (teto_mes >= 0),            -- R$ por mês
@@ -134,6 +166,8 @@ alter table campanhas    enable row level security;
 alter table beneficios   enable row level security;
 alter table resgates     enable row level security;
 alter table visitas      enable row level security;
+alter table planejamentos enable row level security;
+alter table planejamento_tentativas enable row level security;
 alter table regras       enable row level security;
 
 -- Resgate atômico e idempotente. Trava o benefício (toque duplo espera o primeiro

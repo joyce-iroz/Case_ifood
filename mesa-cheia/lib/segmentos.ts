@@ -13,7 +13,7 @@ export type Segmento = (typeof SEGMENTOS)[number]["id"];
 export const ehSegmento = (x: unknown): x is Segmento => SEGMENTOS.some((s) => s.id === x);
 export const rotuloSegmento = (s: Segmento) => SEGMENTOS.find((x) => x.id === s)!.rotulo;
 
-/** Janela de campanha em horas cheias: inicio=18, fim=23 cobre 18h00 até 22h59. */
+/** Janela de campanha em horas, meia hora como ,5: inicio=18.5, fim=20 é 18h30–20h. */
 export type Janela = { dia: number; inicio: number; fim: number };
 
 export type VisitaCliente = { data: string; hora: number };
@@ -21,7 +21,8 @@ export type VisitaCliente = { data: string; hora: number };
 export const DIAS_RECENTES = 60;
 
 const recente = (v: VisitaCliente, hoje: string) => v.data >= somarDias(hoje, -DIAS_RECENTES) && v.data <= hoje;
-const naJanela = (v: VisitaCliente, j: Janela) => diaDaSemana(v.data) === j.dia && v.hora >= j.inicio && v.hora < j.fim;
+// Visita registrada na hora cheia h ocupa h até h+1; conta se essa hora encosta na janela.
+const naJanela = (v: VisitaCliente, j: Janela) => diaDaSemana(v.data) === j.dia && v.hora + 1 > j.inicio && v.hora < j.fim;
 
 /**
  * O cliente teve visita nos últimos 60 dias naquele dia da semana e faixa de hora?
