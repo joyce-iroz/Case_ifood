@@ -1,13 +1,14 @@
 import Link from "next/link";
+import { Salao } from "@/components/Salao";
 
-export default function Salao() {
+export default function PaginaSalao() {
   return (
-    <main className="pagina">
-      <div className="topo">
+    <main className="pagina pagina-salao">
+      <div className="topo topo-salao">
         <h1>Salão</h1>
-        <Link href="/" className="voltar">← Trocar papel</Link>
+        <Link href="/" className="voltar">Trocar papel</Link>
       </div>
-      <p className="legenda">A aplicação de benefícios na conta chega na próxima etapa.</p>
+      <Salao />
     </main>
   );
 }

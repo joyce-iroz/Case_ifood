@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseServidor } from "@/lib/supabase/server";
 import { hojeNoFuso } from "@/lib/dominio";
-import { REGRAS_DEMO, RESTAURANTE_DEMO, gerarClientes, gerarOcupacao } from "@/lib/seed";
+import { randomUUID } from "node:crypto";
+import { REGRAS_DEMO, RESTAURANTE_DEMO, gerarClientesCompletos, gerarOcupacao } from "@/lib/seed";
 import { descreverErro } from "@/lib/erros";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,12 @@ export async function POST() {
     if (rest.error) throw rest.error;
 
     const ocupacao = gerarOcupacao(hoje);
-    const clientes = gerarClientes(hoje);
+    const gerados = gerarClientesCompletos(hoje).map((g) => ({ ...g, id: randomUUID() }));
+    const clientes = gerados.map((g) => ({ id: g.id, ...g.linha })); // telefone em claro não vai para o banco
+    const visitas = gerados.flatMap((g) =>
+      g.visitas.map((v) => ({ restaurante_id: RESTAURANTE_DEMO.id, cliente_id: g.id, data: v.data, hora: v.hora })),
+    );
+
     const resultados = await Promise.all([
       db.from("regras").insert(REGRAS_DEMO),
       db.from("ocupacao").insert(ocupacao),
@@ -33,12 +39,16 @@ export async function POST() {
     const falha = resultados.find((r) => r.error);
     if (falha?.error) throw falha.error;
 
+    const ins = await db.from("visitas").insert(visitas);
+    if (ins.error) throw ins.error;
+
     return NextResponse.json({
       ok: true,
       hoje,
       restaurante: RESTAURANTE_DEMO.nome,
       ocupacao: ocupacao.length,
       clientes: clientes.length,
+      visitas: visitas.length,
       ms: Date.now() - inicio,
     });
   } catch (e) {

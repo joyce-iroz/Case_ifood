@@ -1,6 +1,6 @@
 // Gerador determinístico dos dados da demo. Função pura: recebe a data de hoje
 // e devolve as linhas; quem insere no banco é a rota /api/reset.
-import { createHash } from "node:crypto";
+import { hashTelefone } from "./hash";
 import {
   RESTAURANTE_DEMO_ID,
   diaDaSemana,
@@ -128,11 +128,6 @@ export type LinhaCliente = {
   pedidos_delivery: number;
 };
 
-/** Hash do telefone normalizado (só dígitos, com DDI 55). Mesma função para buscar depois. */
-export function hashTelefone(digitos: string): string {
-  return createHash("sha256").update(digitos.replace(/\D/g, "")).digest("hex");
-}
-
 /** n-ésima ocorrência (0 = mais recente) do dia da semana antes de hoje. */
 function ultimaOcorrencia(hoje: string, dow: number, n: number): string {
   let atras = ((diaDaSemana(hoje) - dow + 7) % 7) || 7;
@@ -140,7 +135,51 @@ function ultimaOcorrencia(hoje: string, dow: number, n: number): string {
   return somarDias(hoje, -atras);
 }
 
+/**
+ * Cliente gerado: a linha que vai para o banco, o telefone em claro (que nunca vai
+ * para o banco, serve só ao painel "Telefones de teste") e o histórico de visitas.
+ */
+export type ClienteGerado = {
+  linha: LinhaCliente;
+  telefone: string;
+  visitas: { data: string; hora: number }[];
+};
+
+const HORAS_TURNO: Record<Turno, number[]> = {
+  almoco: [12, 12, 13, 13, 14],
+  jantar: [19, 19, 20, 20, 21],
+};
+
+/**
+ * Visitas ao salão coerentes com a linha: `visitas` registros, o mais recente em
+ * `ultima_visita`, os anteriores 1 a 3 semanas antes, sempre na janela habitual.
+ * PRNG próprio por cliente, para não mexer na sequência que gera os telefones.
+ */
+function gerarVisitas(c: LinhaCliente, indice: number): { data: string; hora: number }[] {
+  if (!c.ultima_visita || !c.turno_habitual || c.visitas === 0) return [];
+  const rand = mulberry32(SEMENTE + 7919 * (indice + 1));
+  const horas = HORAS_TURNO[c.turno_habitual];
+  const visitas: { data: string; hora: number }[] = [];
+  let data = c.ultima_visita;
+  for (let i = 0; i < c.visitas; i++) {
+    visitas.push({ data, hora: horas[Math.floor(rand() * horas.length)] });
+    data = somarDias(data, -7 * (1 + Math.floor(rand() * 3)));
+  }
+  return visitas;
+}
+
+/** Telefones são os mesmos em qualquer data: o PRNG não depende de `hoje`. */
+export function gerarClientesCompletos(hoje: string, r: Restaurante = RESTAURANTE_DEMO): ClienteGerado[] {
+  const telefones: string[] = [];
+  const linhas = gerarLinhasClientes(hoje, r, telefones);
+  return linhas.map((linha, i) => ({ linha, telefone: telefones[i], visitas: gerarVisitas(linha, i) }));
+}
+
 export function gerarClientes(hoje: string, r: Restaurante = RESTAURANTE_DEMO): LinhaCliente[] {
+  return gerarLinhasClientes(hoje, r, []);
+}
+
+function gerarLinhasClientes(hoje: string, r: Restaurante, telefones: string[]): LinhaCliente[] {
   const rand = mulberry32(SEMENTE);
   const inteiro = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
   const escolher = <T,>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
@@ -158,6 +197,7 @@ export function gerarClientes(hoje: string, r: Restaurante = RESTAURANTE_DEMO): 
 
   const base = (): Pick<LinhaCliente, "restaurante_id" | "telefone_hash" | "telefone_final" | "nome"> => {
     const tel = novoTelefone();
+    telefones.push(tel);
     return {
       restaurante_id: r.id,
       telefone_hash: hashTelefone(tel),

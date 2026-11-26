@@ -30,11 +30,13 @@ ticket médio R$ 78, terça a domingo, 11h–15h e 18h–23h), com id fixo
 
 ## Estado atual
 
-Feito: schema, seed (`POST /api/reset`), `GET /api/ocupacao`, seletor de
-papel, grade de ocupação do dono com botão "Resetar demo", placeholder do salão.
+Feito, sem IA: schema, seed (`POST /api/reset`), grade de ocupação, criação
+de campanha por formulário com emissão de benefícios, tela do salão (consulta
+por telefone e resgate), resultado por campanha e painel "Telefones de teste".
 
-Ainda não existe: IA, campanhas, benefícios, resgate. As tabelas já estão
-criadas e vazias.
+Próximo passo: planejador de campanhas com IA. Ele deve produzir uma
+`PropostaCampanha` e entregá-la a `criarCampanha`, exatamente como o
+formulário faz. Nada fora do planejador pode saber quem criou a campanha.
 
 ## Stack
 
@@ -61,13 +63,26 @@ app/
   salao/page.tsx         placeholder
   api/reset/route.ts     POST: apaga tudo e popula de novo
   api/ocupacao/route.ts  GET: médias por dia da semana × hora
-components/BotaoResetar.tsx   único componente de cliente
+  api/segmentos/route.ts GET: contagem por segmento + contexto da janela
+  api/campanhas/route.ts POST: PropostaCampanha → valida, grava, emite
+  api/salao/consultar    POST {telefone}: ativo | nenhum | resgatado
+  api/salao/aplicar      POST {beneficio_id, valor_conta}: resgate idempotente
+components/
+  BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx   componentes de cliente
 lib/
   supabase/server.ts     cliente com service_role ("server-only")
-  dados.ts               leituras no banco ("server-only")
-  dominio.ts             constantes, datas, horas de funcionamento (puro)
+  dados.ts               leituras no banco, paginar() ("server-only")
+  emissao.ts             criarCampanha, contextoDaJanela ("server-only")
+  resgate.ts             consultarTelefone, aplicarBeneficio ("server-only")
+  painel.ts              resultado por campanha, telefones de teste ("server-only")
+  campanha.ts            PropostaCampanha, regras, desconto, códigos (puro)
+  segmentos.ts           segmentos e visitouNaJanela (puro)
+  resultados.ts          métricas por campanha (puro)
   ocupacao.ts            cálculo da grade (puro)
-  seed.ts                gerador determinístico dos dados da demo (puro)
+  dominio.ts             constantes, datas, fuso, formatação (puro)
+  telefone.ts            normalizar e mascarar telefone (puro, roda no navegador)
+  hash.ts                hashTelefone (node:crypto)
+  seed.ts                gerador determinístico dos dados da demo
   erros.ts               erro → status HTTP
 scripts/check-seed.ts
 supabase/schema.sql      colar no SQL Editor do Supabase
@@ -108,10 +123,52 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   simultâneos. Tabela nova precisa de FK com cascade até `restaurantes`, ou
   tem que ser limpa explicitamente em `/api/reset`.
 - **Telefone** nunca é gravado em claro: `telefone_hash` = sha256 dos dígitos
-  com DDI (`5511987654321`), via `hashTelefone` em `lib/seed.ts`; use a mesma
+  com DDI (`5511987654321`), via `hashTelefone` em `lib/hash.ts`; use a mesma
   função para buscar. Só os 4 últimos dígitos ficam em `telefone_final`, para
   exibir mascarado. Em produção, troque por HMAC com segredo: telefone
   brasileiro tem poucas combinações e sha256 puro é reversível por força bruta.
+- **Uma porta de entrada para campanha.** `criarCampanha(entrada)` em
+  `lib/emissao.ts` recebe um objeto desconhecido, converte com `lerProposta`,
+  valida com `validarProposta` e emite. Formulário e planejador chamam a mesma
+  função (via `POST /api/campanhas` ou direto no servidor). Não existe coluna
+  de origem e nenhum código pode ramificar por criador.
+- **Regras de campanha** (todas bloqueiam e nada é gravado):
+  janela dentro do horário de funcionamento; `percentual` ≤ `desconto_max`;
+  `valor_fixo` ≤ `desconto_max`% do ticket médio; ocupação média da janela
+  abaixo de `ocupacao_min`; `teto` da campanha ≤ teto mensal restante;
+  pelo menos um cliente elegível. `dias_entre_ofertas` tira do lote quem
+  recebeu oferta recente; se tirar todos, bloqueia.
+- **Teto mensal comprometido** (`comprometidoNoMes`): no mês de `data_janela`,
+  campanha com janela ainda aberta reserva o `teto` inteiro; campanha
+  encerrada conta só o que gastou.
+- **Segmentos** (`lib/segmentos.ts`), em relação à janela, sem sobreposição:
+  `frequenta_janela` = visita nos últimos 60 dias naquele dia da semana e faixa
+  de hora; `frequenta_outras` = visita nos últimos 60 dias, nenhuma na janela;
+  `sumiu_60_dias` = tem visitas, nenhuma nos últimos 60 dias;
+  `delivery_nunca_veio` = origem delivery e nenhuma visita.
+- **Incremental** = `!visitouNaJanela(...)`, a mesma função do segmento
+  `frequenta_janela`. Calculado no resgate e gravado em `resgates.incremental`;
+  nunca recalcular depois.
+- **Desconto no resgate** (`calcularDesconto`): nominal do benefício, limitado
+  a `desconto_max`% da conta e ao que resta do teto da campanha. A função SQL
+  `resgatar_beneficio` aplica de novo o limite do teto, com trava na campanha.
+- **Resgate idempotente.** `resgatar_beneficio` trava a linha do benefício;
+  se já existe resgate, devolve o mesmo com `novo: false`. `resgates.beneficio_id`
+  é único como segunda barreira. O cliente pode reenviar à vontade.
+- **Validade do benefício**: a janela da campanha na próxima ocorrência do
+  dia (`proximaJanela`): hoje, se a janela ainda não terminou, senão na
+  semana seguinte. `DEMO_ACEITA_ANTES_DA_JANELA = true` em `lib/campanha.ts`
+  deixa resgatar antes de `valido_de` para a apresentação funcionar em
+  qualquer dia; depois de `valido_ate` sempre recusa. Em produção, `false`.
+- **Expiração** é preguiçosa: `expirarVencidos()` roda nas leituras do painel
+  e do salão e marca `emitido` vencido como `expirado`.
+- **Salão** tem três respostas e só três: `ativo`, `nenhum`, `resgatado`.
+  Telefone que não existe no banco é `nenhum`, igual a cliente sem benefício.
+  Telefone sempre mascarado (`mascararTelefone`, formato `(11) 9••••-••41`).
+  O telefone viaja em corpo de POST, nunca em URL.
+- **Telefones de teste** (painel do dono) são regenerados do seed em memória
+  (`gerarClientesCompletos`); o banco continua só com hash e 4 últimos
+  dígitos. Os telefones do seed não dependem da data.
 - Identificadores de domínio em português, sem acento no código
   (`ocupacao`, `beneficio`); texto de interface em português com acento.
 - Schema mudou? Atualize `supabase/schema.sql` (ele derruba e recria tudo) e a
@@ -165,6 +222,21 @@ ao desenho original, necessárias para a demo.
 Índices: `(restaurante_id, dia_habitual, turno_habitual)`,
 `(restaurante_id, origem)`, `(restaurante_id, ultima_visita)`.
 
+`visitas` e `ultima_visita` são atualizados pelo resgate.
+
+### visitas †
+| coluna | tipo | nota |
+|---|---|---|
+| id | bigint identity pk | |
+| restaurante_id | uuid fk → restaurantes, cascade | |
+| cliente_id | uuid fk → clientes, cascade | |
+| data | date | |
+| hora | smallint 0–23 | |
+
+Índices: `(restaurante_id, data)`, `(cliente_id, data desc)`. Base dos
+segmentos e de `incremental`. O seed grava cerca de 2.600 visitas coerentes
+com `clientes.visitas` e `ultima_visita`; cada resgate grava mais uma.
+
 Seed: 60 de terça à noite, 120 de outras janelas (visita nos últimos 56 dias),
 150 só delivery (`visitas = 0`, `ultima_visita` null), 70 sumidos (última
 visita entre 61 e 240 dias atrás).
@@ -174,17 +246,18 @@ visita entre 61 e 240 dias atrás).
 |---|---|---|
 | id | uuid pk | |
 | restaurante_id | uuid fk → restaurantes, cascade | |
-| dia_semana | smallint 0–6 | |
-| hora_inicio | time | |
-| hora_fim | time | > hora_inicio |
-| segmento | text | |
-| tipo | text | ex.: `'percentual'`, `'valor_fixo'`, `'item'` (a definir) |
-| valor | numeric(10,2) | |
-| teto | numeric(10,2) null | gasto máximo da campanha, R$ |
-| status | text | default `'proposta'`; valores a definir na próxima etapa |
+| dia_semana | smallint 0–6 | igual ao dia de `data_janela` |
+| hora_inicio | time | hora cheia |
+| hora_fim | time | hora cheia, exclusiva, > hora_inicio |
+| segmento | text | `frequenta_janela` \| `frequenta_outras` \| `delivery_nunca_veio` \| `sumiu_60_dias` |
+| tipo | text | `percentual` (valor em %) \| `valor_fixo` (valor em R$) |
+| valor | numeric(10,2) | > 0 |
+| teto | numeric(10,2) | gasto máximo da campanha em descontos, R$ |
+| status | text | `ativa` \| `encerrada` |
+| data_janela † | date | dia em que os benefícios valem |
 | criado_em † | timestamptz | |
 
-Índice: `(restaurante_id, status)`.
+Índice: `(restaurante_id, data_janela)`.
 
 ### beneficios
 | coluna | tipo | nota |
@@ -192,13 +265,15 @@ visita entre 61 e 240 dias atrás).
 | id | uuid pk | |
 | campanha_id | uuid fk → campanhas, cascade | |
 | cliente_id | uuid fk → clientes, cascade | |
-| codigo | text unique | chave da validação no fechamento da conta |
+| codigo | char(4) | 4 dígitos, único dentro da campanha |
 | valido_de | timestamptz | |
 | valido_ate | timestamptz | > valido_de |
 | status | text | `'emitido'` \| `'resgatado'` \| `'expirado'` |
 | criado_em † | timestamptz | para `dias_entre_ofertas` |
 
-Índices: `campanha_id`; `(cliente_id, criado_em desc)`.
+Único `(campanha_id, codigo)`. Índices: `(cliente_id, criado_em desc)`
+(consulta do salão), `criado_em` (dias_entre_ofertas). A busca no salão é por
+`clientes.telefone_hash`, não pelo código.
 
 ### resgates
 | coluna | tipo | nota |
@@ -221,6 +296,13 @@ visita entre 61 e 240 dias atrás).
 | dias_entre_ofertas | integer | seed 15 |
 | ocupacao_min | numeric(5,2) | % da capacidade; abaixo disso a janela é "vazia"; seed 50 |
 
+### Função `resgatar_beneficio`
+`(p_beneficio_id, p_valor_conta, p_desconto, p_incremental, p_data, p_hora) → jsonb`.
+Trava o benefício, devolve o resgate existente se houver (`novo: false`),
+senão trava a campanha, limita o desconto ao teto restante, grava o resgate,
+marca o benefício como `resgatado`, grava a visita e atualiza o cliente.
+Execução só para `service_role`.
+
 ## API
 
 - `POST /api/reset` → `{ ok, hoje, restaurante, ocupacao, clientes, ms }`.
@@ -229,3 +311,11 @@ visita entre 61 e 240 dias atrás).
   Média de `pessoas / capacidade` por (dia da semana, hora) nos 60 dias que
   terminam ontem. Cadeiras-hora vazias = soma de `capacidade − pessoas` nas
   horas de funcionamento dos 30 dias que terminam ontem.
+- `GET /api/segmentos?dia=2&inicio=18&fim=23` → contagem `{total, elegiveis}`
+  por segmento, ocupação média da janela, teto restante do mês, validade.
+- `POST /api/campanhas` com `PropostaCampanha` → 201 `{ok: true, campanhaId,
+  emitidos, foraPorIntervalo, validade}` ou 422 `{ok: false, bloqueios:
+  [{regra, mensagem}]}`.
+- `POST /api/salao/consultar {telefone}` → `{tipo: "ativo" | "nenhum" | "resgatado", ...}`.
+- `POST /api/salao/aplicar {beneficio_id, valor_conta}` → `{ok, novo,
+  valorConta, desconto, aPagar, resgatadoEm}`; 409 se o benefício não está ativo.

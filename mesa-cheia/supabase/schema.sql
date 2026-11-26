@@ -3,9 +3,11 @@
 -- Pode ser rodado de novo: derruba e recria as tabelas (apaga os dados).
 -- Depois, popule com POST /api/reset (ou o botão "Resetar demo").
 
+drop function if exists resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint);
 drop table if exists resgates   cascade;
 drop table if exists beneficios cascade;
 drop table if exists campanhas  cascade;
+drop table if exists visitas    cascade;
 drop table if exists clientes   cascade;
 drop table if exists ocupacao   cascade;
 drop table if exists regras     cascade;
@@ -60,35 +62,50 @@ create index clientes_segmento_idx on clientes (restaurante_id, dia_habitual, tu
 create index clientes_origem_idx   on clientes (restaurante_id, origem);
 create index clientes_ultima_idx   on clientes (restaurante_id, ultima_visita);
 
+-- Histórico de visitas ao salão. Base dos segmentos e da classificação de incremental.
+create table visitas (
+  id              bigint generated always as identity primary key,
+  restaurante_id  uuid not null references restaurantes(id) on delete cascade,
+  cliente_id      uuid not null references clientes(id) on delete cascade,
+  data            date not null,
+  hora            smallint not null check (hora between 0 and 23)
+);
+create index visitas_periodo_idx on visitas (restaurante_id, data);
+create index visitas_cliente_idx on visitas (cliente_id, data desc);
+
 create table campanhas (
   id              uuid primary key default gen_random_uuid(),
   restaurante_id  uuid not null references restaurantes(id) on delete cascade,
   dia_semana      smallint not null check (dia_semana between 0 and 6),
   hora_inicio     time not null,
   hora_fim        time not null,
-  segmento        text not null,
-  tipo            text not null,               -- ex.: 'percentual', 'valor_fixo', 'item'
-  valor           numeric(10,2) not null check (valor >= 0),
-  teto            numeric(10,2) check (teto >= 0),   -- teto de gasto da campanha, em R$
-  status          text not null default 'proposta',
+  segmento        text not null check (segmento in
+                    ('frequenta_janela', 'frequenta_outras', 'delivery_nunca_veio', 'sumiu_60_dias')),
+  tipo            text not null check (tipo in ('percentual', 'valor_fixo')),
+  valor           numeric(10,2) not null check (valor > 0),  -- % da conta ou R$, conforme tipo
+  teto            numeric(10,2) not null check (teto > 0),   -- gasto máximo da campanha, em R$
+  status          text not null default 'ativa' check (status in ('ativa', 'encerrada')),
+  data_janela     date not null,                             -- a ocorrência do dia_semana em que os benefícios valem
   criado_em       timestamptz not null default now(),
-  check (hora_fim > hora_inicio)
+  check (hora_fim > hora_inicio),
+  check (extract(dow from data_janela) = dia_semana)
 );
-create index campanhas_restaurante_idx on campanhas (restaurante_id, status);
+create index campanhas_restaurante_idx on campanhas (restaurante_id, data_janela);
 
 create table beneficios (
   id           uuid primary key default gen_random_uuid(),
   campanha_id  uuid not null references campanhas(id) on delete cascade,
   cliente_id   uuid not null references clientes(id) on delete cascade,
-  codigo       text not null unique,           -- índice único: busca direta no fechamento da conta
+  codigo       char(4) not null,               -- 4 dígitos, único dentro da campanha
   valido_de    timestamptz not null,
   valido_ate   timestamptz not null,
   status       text not null default 'emitido' check (status in ('emitido', 'resgatado', 'expirado')),
   criado_em    timestamptz not null default now(),
-  check (valido_ate > valido_de)
+  check (valido_ate > valido_de),
+  unique (campanha_id, codigo)                -- também serve de índice por campanha
 );
-create index beneficios_campanha_idx on beneficios (campanha_id);
-create index beneficios_cliente_idx  on beneficios (cliente_id, criado_em desc);  -- dias_entre_ofertas
+create index beneficios_cliente_idx  on beneficios (cliente_id, criado_em desc);  -- consulta do salão e dias_entre_ofertas
+create index beneficios_criado_idx   on beneficios (criado_em);                   -- dias_entre_ofertas na emissão
 
 create table resgates (
   id            uuid primary key default gen_random_uuid(),
@@ -116,4 +133,76 @@ alter table clientes     enable row level security;
 alter table campanhas    enable row level security;
 alter table beneficios   enable row level security;
 alter table resgates     enable row level security;
+alter table visitas      enable row level security;
 alter table regras       enable row level security;
+
+-- Resgate atômico e idempotente. Trava o benefício (toque duplo espera o primeiro
+-- terminar e recebe o mesmo resgate), limita o desconto ao que sobra do teto da
+-- campanha, grava o resgate, marca o benefício e registra a visita. O cálculo do
+-- desconto e a classificação de incremental chegam prontos do código (lib/resgate.ts).
+create function resgatar_beneficio(
+  p_beneficio_id uuid,
+  p_valor_conta  numeric,
+  p_desconto     numeric,
+  p_incremental  boolean,
+  p_data         date,
+  p_hora         smallint
+) returns jsonb
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_ben   beneficios%rowtype;
+  v_camp  campanhas%rowtype;
+  v_res   resgates%rowtype;
+  v_gasto numeric;
+begin
+  select * into v_ben from beneficios where id = p_beneficio_id for update;
+  if not found then
+    raise exception 'beneficio_inexistente';
+  end if;
+
+  select * into v_res from resgates where beneficio_id = p_beneficio_id;
+  if found then
+    return to_jsonb(v_res) || jsonb_build_object('novo', false);
+  end if;
+
+  if v_ben.status <> 'emitido' then
+    raise exception 'beneficio_indisponivel';
+  end if;
+
+  select * into v_camp from campanhas where id = v_ben.campanha_id for update;
+  select coalesce(sum(r.desconto), 0) into v_gasto
+    from resgates r join beneficios b on b.id = r.beneficio_id
+   where b.campanha_id = v_camp.id;
+
+  insert into resgates (beneficio_id, valor_conta, desconto, incremental)
+  values (p_beneficio_id, p_valor_conta,
+          greatest(0, least(p_desconto, v_camp.teto - v_gasto)),
+          p_incremental)
+  returning * into v_res;
+
+  update beneficios set status = 'resgatado' where id = p_beneficio_id;
+
+  insert into visitas (restaurante_id, cliente_id, data, hora)
+  values (v_camp.restaurante_id, v_ben.cliente_id, p_data, p_hora);
+
+  update clientes
+     set visitas = visitas + 1,
+         ultima_visita = greatest(coalesce(ultima_visita, p_data), p_data)
+   where id = v_ben.cliente_id;
+
+  return to_jsonb(v_res) || jsonb_build_object('novo', true);
+end;
+$$;
+
+revoke execute on function resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke execute on function resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint) from anon, authenticated;
+    grant  execute on function resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint) to service_role;
+  end if;
+end $$;
+
+-- Faz a API do Supabase enxergar a função e as tabelas novas na hora.
+notify pgrst, 'reload schema';

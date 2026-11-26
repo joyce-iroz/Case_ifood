@@ -51,3 +51,47 @@ export function somarDias(data: string, dias: number): string {
 export function diaDaSemana(data: string): number {
   return new Date(`${data}T00:00:00Z`).getUTCDay();
 }
+
+/** Data, hora e minuto de agora no fuso do restaurante. */
+export function agoraNoFuso(agora = new Date()): { data: string; hora: number; minuto: number } {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(agora);
+  const p = (t: string) => partes.find((x) => x.type === t)!.value;
+  return { data: `${p("year")}-${p("month")}-${p("day")}`, hora: Number(p("hour")), minuto: Number(p("minute")) };
+}
+
+/**
+ * Instante ISO de uma data e hora cheia no fuso do restaurante.
+ * São Paulo está em UTC−3 o ano todo desde 2019 (sem horário de verão).
+ */
+export function instanteNoFuso(data: string, hora: number): string {
+  if (hora === 24) return instanteNoFuso(somarDias(data, 1), 0);
+  return `${data}T${String(hora).padStart(2, "0")}:00:00-03:00`;
+}
+
+export const horaDoTime = (t: string) => Number(t.slice(0, 2));
+export const timeDaHora = (h: number) => `${String(h).padStart(2, "0")}:00:00`;
+
+const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+export const formatarMoeda = (v: number) => moeda.format(v);
+
+const NOMES_DIA_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"] as const;
+export const nomeDiaLongo = (d: number) => NOMES_DIA_LONGO[d];
+
+/** "ter 01/12" */
+export function formatarDataCurta(data: string): string {
+  const [, m, d] = data.split("-");
+  return `${NOMES_DIA[diaDaSemana(data)].toLowerCase()} ${d}/${m}`;
+}
+
+/** "ter 01/12, 18h–23h" */
+export function formatarJanela(data: string, inicio: number, fim: number): string {
+  return `${formatarDataCurta(data)}, ${inicio}h–${fim}h`;
+}
