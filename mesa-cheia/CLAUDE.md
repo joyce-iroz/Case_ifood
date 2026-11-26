@@ -88,6 +88,7 @@ app/
   api/planejador/[id]/previa     POST {proposta}: revalida, devolve elegíveis/custo/saldo/bloqueios
   api/planejador/[id]/aprovar    POST {indice, proposta?}: revalida e chama criarCampanha
   api/planejador/[id]/descartar  POST
+  api/planejador/diagnostico     GET: qual variável de chave existe + chamada de teste
   api/kits/[campanhaId]/entregue POST: dono copiou a mensagem da equipe
   api/regras             GET / PATCH
 components/
@@ -243,7 +244,11 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   pula as já mostradas e deixa `frequenta_janela` por último (só canibaliza).
   Passadas 3 gerações, as combinações podem voltar.
   O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
-  Sem `GEMINI_API_KEY`, a tentativa registra o erro e vai direto à regra fixa.
+  Sem chave, a tentativa registra o erro e vai direto à regra fixa. A chave é
+  lida de `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` ou `GOOGLE_API_KEY`,
+  nessa ordem (`variavelDaChave`; integrações da Vercel podem usar outro nome).
+  `GET /api/planejador/diagnostico` mostra qual variável o deploy enxerga (só o
+  nome) e faz uma chamada mínima ao modelo, com o erro exato se falhar.
 - **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
   chama `gerarKit` uma vez (formulário e planejador, sem distinção). Nunca no
   carregamento de página. Validação (`validarKit`): 4 campos de texto não

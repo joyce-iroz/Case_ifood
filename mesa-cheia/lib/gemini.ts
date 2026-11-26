@@ -5,11 +5,17 @@ export const MODELO_PADRAO = "gemini-3.5-flash-lite";
 
 export class SemChaveError extends Error {
   constructor() {
-    super("GEMINI_API_KEY não configurada no servidor");
+    super(`Nenhuma chave do Gemini no servidor (procurei ${NOMES_CHAVE.join(", ")}). Depois de cadastrar, faça redeploy.`);
   }
 }
 
 export const modeloConfigurado = () => process.env.GEMINI_MODEL || MODELO_PADRAO;
+
+/** Nomes aceitos para a chave. Integrações (ex.: Marketplace da Vercel) às vezes usam outro nome. */
+export const NOMES_CHAVE = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"] as const;
+
+/** Qual variável tem a chave. Devolve só o nome, nunca o valor. */
+export const variavelDaChave = () => NOMES_CHAVE.find((n) => !!process.env[n]?.trim()) ?? null;
 
 /**
  * Manda instrução de sistema + mensagem e devolve o texto da resposta, pedindo JSON.
@@ -17,7 +23,8 @@ export const modeloConfigurado = () => process.env.GEMINI_MODEL || MODELO_PADRAO
  * GEMINI_API_URL existe só para apontar a um servidor falso em teste local.
  */
 export async function gerarJson(sistema: string, usuario: string, timeoutMs = 25_000): Promise<string> {
-  const chave = process.env.GEMINI_API_KEY;
+  const nome = variavelDaChave();
+  const chave = nome ? process.env[nome]!.trim() : null;
   if (!chave) throw new SemChaveError();
   const base = process.env.GEMINI_API_URL || "https://generativelanguage.googleapis.com/v1beta";
   const resp = await fetch(`${base}/models/${encodeURIComponent(modeloConfigurado())}:generateContent`, {
