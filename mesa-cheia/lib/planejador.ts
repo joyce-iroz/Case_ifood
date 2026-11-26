@@ -6,7 +6,7 @@ import { supabaseServidor } from "./supabase/server";
 import { paginar } from "./dados";
 import { RESTAURANTE_DEMO_ID, formatarHora, formatarJanela, NOMES_DIA } from "./dominio";
 import { avaliarJanela, avaliarProposta, carregarBase, criarCampanha, type Base, type ResultadoCriacao } from "./emissao";
-import { gerarJson, modeloConfigurado, SemChaveError } from "./gemini";
+import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
 import { calcularCandidatas } from "./janelas";
 import {
   JANELAS_NO_CARDAPIO,
@@ -28,7 +28,7 @@ import { EntradaInvalidaError } from "./resgate";
 const INSTRUCAO = `Você planeja campanhas de benefício para um restaurante encher mesas vazias.
 Você não calcula números e não decide valores de dinheiro: escolhe entre as opções do JSON de entrada, que já foram calculadas e validadas por código.
 
-Responda só com um array JSON de exatamente 3 objetos, sem nenhum texto fora dele. Cada objeto tem exatamente estas chaves:
+Responda só com um objeto JSON {"propostas": [...]} em que "propostas" é um array de exatamente 3 objetos, sem nenhum texto fora dele. Cada objeto tem exatamente estas chaves:
 aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo, custo_maximo, justificativa.
 
 - aposta: rótulo curto do trade-off daquela alternativa, por exemplo "mais volume" (segmento maior), "mais barato" (desconto menor), "cliente novo" (delivery_nunca_veio).

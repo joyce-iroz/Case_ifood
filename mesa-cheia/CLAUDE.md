@@ -56,10 +56,20 @@ Nada fora do planejador sabe quem criou a campanha.
   Referência visual: canvas https://claude.ai/artifact/RRqWUYvcyMKsoQt6jxycQn
 - Supabase (Postgres) via `@supabase/supabase-js`, só no servidor.
 - Deploy na Vercel.
-- Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-  `GEMINI_API_KEY`, opcional `GEMINI_MODEL` (padrão `gemini-3.5-flash-lite`)
-  (ver `.env.example`). `GEMINI_API_URL` existe só para apontar a um Gemini
-  falso em teste local.
+- Modelo de linguagem, em `lib/llm.ts`: Groq (padrão da demo, gratuito com
+  limite) e xAI (Grok), ambos no formato da OpenAI, ou Gemini. Ordem sem
+  `LLM_PROVEDOR`: Groq, xAI, Gemini, o primeiro que tiver chave. O provedor não
+  muda nenhuma regra, validação ou fallback. Groq/xAI pedem
+  `response_format: json_object`; se o modelo recusar (HTTP 400), pede de novo
+  sem ele.
+- Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e uma
+  chave de modelo: `GROQ_API_KEY`, opcional `GROQ_MODEL` (padrão
+  `openai/gpt-oss-120b`); ou `XAI_API_KEY` (ou `GROK_API_KEY`), opcional
+  `XAI_MODEL` (padrão `grok-4.6`); ou `GEMINI_API_KEY` (ou
+  `GOOGLE_GENERATIVE_AI_API_KEY`, `GOOGLE_API_KEY`), opcional `GEMINI_MODEL`
+  (padrão `gemini-3.5-flash-lite`). Ver `.env.example`. `GROQ_API_URL`,
+  `XAI_API_URL` e `GEMINI_API_URL` existem só para apontar a servidores falsos
+  em teste local.
 
 ## Comandos
 
@@ -106,7 +116,7 @@ lib/
   janelas.ts             janelas candidatas (puro)
   planejador-regras.ts   cardápio, validação da saída do modelo, regra fixa (puro)
   planejador.ts          gerar/aprovar/descartar/listar ("server-only")
-  gemini.ts              chamada REST ao Gemini ("server-only")
+  llm.ts                 gerarJson para Groq, Grok ou Gemini, diagnóstico ("server-only")
   kit-regras.ts          validação e template do kit, conferência de números (puro)
   kit.ts                 gerarKit, carregarKits, marcarKitEntregue ("server-only")
   numero.ts              lerNumeroBR, formatarNumeroBR, lerCampoNumero (puro)
@@ -236,19 +246,21 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   O formulário manual NÃO tem restrição de cardápio, de propósito: quem quer
   campanha em janela cheia usa ele. O editor é restrito porque existe para
   fazer yield.
-  **Gerar outras não repete.** A linha 3.5 do Gemini não aceita temperatura,
-  então a mesma entrada dá a mesma saída. `propostasRecentes` lê as
+  **Gerar outras não repete.** Sem temperatura (a linha 3.5 do Gemini não
+  aceita; no Groq/Grok não usamos), a mesma entrada dá a mesma saída. `propostasRecentes` lê as
   alternativas das últimas 3 gerações; elas vão ao modelo em
   `propostas_ja_mostradas`, e uma alternativa com a mesma janela + segmento
   (`chaveCombo`) de uma delas é descartada com o motivo. A regra fixa também
   pula as já mostradas e deixa `frequenta_janela` por último (só canibaliza).
   Passadas 3 gerações, as combinações podem voltar.
   O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
-  Sem chave, a tentativa registra o erro e vai direto à regra fixa. A chave é
-  lida de `GEMINI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` ou `GOOGLE_API_KEY`,
-  nessa ordem (`variavelDaChave`; integrações da Vercel podem usar outro nome).
-  `GET /api/planejador/diagnostico` mostra qual variável o deploy enxerga (só o
-  nome) e faz uma chamada mínima ao modelo, com o erro exato se falhar.
+  Sem chave, a tentativa registra o erro e vai direto à regra fixa
+  (`provedorConfigurado` em lib/llm.ts decide provedor e variável).
+  `GET /api/planejador/diagnostico` mostra provedor, qual variável o deploy
+  enxerga (só o nome), os modelos que a chave lista e faz uma chamada mínima,
+  com o erro exato se falhar. A resposta do planejador é o objeto
+  `{"propostas": [...]}` (o modo JSON do formato OpenAI só devolve objeto);
+  `validarAlternativas` aceita também o array puro.
 - **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
   chama `gerarKit` uma vez (formulário e planejador, sem distinção). Nunca no
   carregamento de página. Validação (`validarKit`): 4 campos de texto não

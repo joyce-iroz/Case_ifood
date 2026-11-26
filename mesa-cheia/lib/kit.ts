@@ -8,7 +8,7 @@ import "server-only";
 // resgate. O pior que um prompt injetado consegue é um texto ruim no kit, que o dono vê
 // antes de copiar.
 import { supabaseServidor } from "./supabase/server";
-import { gerarJson, modeloConfigurado, SemChaveError } from "./gemini";
+import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
 import { kitTemplate, validarKit, type BeneficioKit, type EntradaKit, type TextosKit } from "./kit-regras";
 
 const INSTRUCAO_KIT = `Você escreve textos curtos para a equipe de um restaurante divulgar uma campanha.
