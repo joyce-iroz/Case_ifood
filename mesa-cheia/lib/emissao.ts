@@ -15,6 +15,7 @@ import {
   janelaDa,
   lerProposta,
   limiteValorFixo,
+  textoBeneficio,
   proximaJanela,
   separarPorIntervalo,
   validarProposta,
@@ -22,7 +23,9 @@ import {
   type PropostaCampanha,
   type Regras,
 } from "./campanha";
-import { SEGMENTOS, classificarCliente, type Janela, type Segmento } from "./segmentos";
+import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmento } from "./segmentos";
+import { gerarKit } from "./kit";
+import { janelaNatural } from "./kit-regras";
 import type { ResumoOcupacao } from "./ocupacao";
 
 /** Média das células da grade na janela, pesada pelo tempo de cada hora dentro dela. */
@@ -185,6 +188,7 @@ export type ResultadoCriacao =
       foraPorIntervalo: number;
       validade: string;
       regras: Regras;
+      kit: { gerado: boolean; modelo: string | null };
     }
   | { ok: false; bloqueios: Bloqueio[] };
 
@@ -232,6 +236,19 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
     throw emissao.error;
   }
 
+  // Kit de ativação: uma vez, logo depois da emissão. gerarKit nunca lança; se tudo
+  // falhar, a campanha segue criada e o painel mostra que ela está sem kit.
+  const kit = await gerarKit(campanha.id, {
+    restaurante: {
+      nome: ctx.restaurante.nome,
+      cozinha: ctx.restaurante.cozinha,
+      ticket_medio: ctx.restaurante.ticket_medio,
+    },
+    janela: janelaNatural(p.dia_semana, p.hora_inicio, p.hora_fim),
+    beneficio: textoBeneficio(p.tipo, p.valor),
+    segmento: rotuloSegmento(p.segmento),
+  }, { tipo: p.tipo, valor: p.valor });
+
   return {
     ok: true,
     campanhaId: campanha.id,
@@ -239,5 +256,6 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
     foraPorIntervalo: recentes.length,
     validade: formatarJanela(ctx.proxima.data, p.hora_inicio, p.hora_fim),
     regras: ctx.regras,
+    kit: { gerado: !!kit, modelo: kit?.modelo ?? null },
   };
 }

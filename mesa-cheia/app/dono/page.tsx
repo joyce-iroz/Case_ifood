@@ -4,6 +4,7 @@ import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
 import { FormCampanha } from "@/components/FormCampanha";
 import { FormRegras } from "@/components/FormRegras";
+import { KitAtivacao } from "@/components/KitAtivacao";
 import { Planejador } from "@/components/Planejador";
 import { Tentativas } from "@/components/Tentativas";
 import { listarPlanejamentos, type PlanejamentoView } from "@/lib/planejador";
@@ -14,6 +15,7 @@ import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
 import { carregarPainel, type CampanhaPainel, type TelefoneTeste } from "@/lib/painel";
 import { textoBeneficio } from "@/lib/campanha";
+import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
 import { janelaMaisVazia, type ResumoOcupacao } from "@/lib/ocupacao";
 
@@ -103,6 +105,8 @@ export default async function Dono() {
             <Planejador inicial={planejamentos.find((x) => x.status === "proposta") ?? null} />
           </section>
         )}
+
+        {painel && painel.campanhas.length > 0 && <BlocoKits campanhas={painel.campanhas} />}
 
         {resumo && resumo.celulas.length > 0 && (
           <div className="duas-colunas">
@@ -223,36 +227,48 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
               <th scope="col">Emitidos</th>
               <th scope="col">Resgatados</th>
               <th scope="col">Soma das contas</th>
-              <th scope="col">Receita incremental</th>
+              <th scope="col">Incrementais</th>
+              <th scope="col">Canibalizados</th>
               <th scope="col">Custo em descontos</th>
               <th scope="col">Custo por cliente incremental</th>
             </tr>
           </thead>
           <tbody>
-            {campanhas.map(({ campanha: c, resultado: r }) => (
-              <tr key={c.id}>
-                <th scope="row">
-                  <b>{descricaoCampanha(c)}</b> <span className="legenda">{formatarDataCurta(c.data_janela)}</span>
-                  <span className="sub">
-                    {rotuloSegmento(c.segmento)} · {textoBeneficio(c.tipo, c.valor)} · teto {formatarMoeda(c.teto)}
-                  </span>
-                </th>
-                <td>{r.emitidos}</td>
-                <td>
-                  {r.resgatados}
-                  {r.taxaResgate !== null && <span className="sub">{fmt.format(r.taxaResgate)}%</span>}
-                </td>
-                <td>{moeda(r.somaContas)}</td>
-                <td>
-                  <span className={r.receitaIncremental > 0 ? "verde" : undefined}>{moeda(r.receitaIncremental)}</span>
-                  <span className="sub">
-                    {r.resgatesIncrementais} {r.resgatesIncrementais === 1 ? "incremental" : "incrementais"}
-                  </span>
-                </td>
-                <td>{moeda(r.custoDescontos)}</td>
-                <td><b>{moeda(r.custoPorIncremental)}</b></td>
-              </tr>
-            ))}
+            {campanhas.map(({ campanha: c, resultado: r }) => {
+              const alerta = canibalizadoEmAlerta(r);
+              return (
+                <tr key={c.id}>
+                  <th scope="row">
+                    <b>{descricaoCampanha(c)}</b> <span className="legenda">{formatarDataCurta(c.data_janela)}</span>
+                    <span className="sub">
+                      {rotuloSegmento(c.segmento)} · {textoBeneficio(c.tipo, c.valor)} · teto {formatarMoeda(c.teto)}
+                    </span>
+                  </th>
+                  <td>{r.emitidos}</td>
+                  <td>
+                    {r.resgatados}
+                    {r.taxaResgate !== null && <span className="sub">{fmt.format(r.taxaResgate)}% dos emitidos</span>}
+                  </td>
+                  <td>{moeda(r.somaContas)}</td>
+                  <td>
+                    <span className={r.resgatesIncrementais > 0 ? "verde" : undefined}>{r.resgatesIncrementais}</span>
+                    {r.percentualIncremental !== null && (
+                      <span className="sub">{fmt.format(r.percentualIncremental)}% dos resgates</span>
+                    )}
+                    <span className="sub">receita {moeda(r.receitaIncremental)}</span>
+                  </td>
+                  <td className={alerta ? "alerta-canibal" : undefined}>
+                    {r.resgatesCanibalizados}
+                    <span className="sub">custo {moeda(r.custoCanibalizado)}</span>
+                    {alerta && <span className="sub">acima de 40% do custo</span>}
+                  </td>
+                  <td>{moeda(r.custoDescontos)}</td>
+                  <td>
+                    <b>{moeda(r.custoPorIncremental)}</b>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -261,6 +277,9 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
         <br />
         Receita incremental = contas dos resgates incrementais, já descontado o benefício. Custo por cliente incremental =
         todo o custo em descontos da campanha dividido pelos resgates incrementais.
+        <br />
+        Canibalizado = desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de
+        escolher janela e público, em vez de anunciar desconto para todo mundo.
       </p>
 
       {campanhas.map(({ campanha: c, beneficios }) => (
@@ -302,6 +321,35 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
   );
 }
 
+/** Métrica de divulgação no salão e o kit das campanhas cuja janela ainda não passou. */
+function BlocoKits({ campanhas }: { campanhas: CampanhaPainel[] }) {
+  const entregues = campanhas.filter((c) => c.kit?.entregue_em).length;
+  const ativas = campanhas.filter((c) => c.ativa);
+  return (
+    <section className="cartao-painel" aria-labelledby="t-kit">
+      <p className="metrica-kit">
+        Campanhas com kit entregue à equipe:{" "}
+        <b className={entregues === campanhas.length ? "verde" : undefined}>
+          {entregues} de {campanhas.length}
+        </b>
+      </p>
+      <h2 id="t-kit">Kit de ativação</h2>
+      {ativas.length === 0 ? (
+        <p className="legenda">Nenhuma campanha com janela por vir.</p>
+      ) : (
+        <KitAtivacao
+          itens={ativas.map((c) => ({
+            campanhaId: c.campanha.id,
+            rotulo: `${descricaoCampanha(c.campanha)} · ${formatarDataCurta(c.campanha.data_janela)}`,
+            beneficio: textoBeneficio(c.campanha.tipo, c.campanha.valor),
+            kit: c.kit,
+          }))}
+        />
+      )}
+    </section>
+  );
+}
+
 const STATUS_PLANO: Record<PlanejamentoView["status"], string> = {
   proposta: "aguardando decisão",
   aprovada: "aprovada",
@@ -325,21 +373,42 @@ function RegistroPlanejador({ planos }: { planos: PlanejamentoView[] }) {
         <span className="legenda">últimas {planos.length} propostas · lista crua das janelas em <a href="/api/janelas">/api/janelas</a></span>
       </div>
       {planos.map((p) => {
-        const ap = p.apresentacao && !("motivo" in p.apresentacao && p.apresentacao.motivo) ? p.apresentacao : null;
-        const aprovadas = p.tentativas.filter((t) => t.aprovada).length;
+        const passaram = p.tentativas.filter((t) => t.aprovada).length;
+        const aprovada = p.alternativaAprovada !== null ? p.alternativas[p.alternativaAprovada] : null;
         return (
           <details key={p.id} className="recolhivel">
             <summary>
               <span>
                 {dataHora.format(new Date(p.criadoEm))} ·{" "}
-                {ap && "janela" in ap ? `${ap.janela} · ${ap.beneficio}` : "sem proposta"}
+                {p.alternativas.length
+                  ? `${p.alternativas.length} ${p.alternativas.length === 1 ? "alternativa" : "alternativas"}`
+                  : "sem proposta"}
+                {aprovada && ` · aprovada: “${aprovada.aposta}”${p.editada ? " (editada)" : ""}`}
               </span>
               <span className="qtd">
                 {p.origem === "fallback" ? "regra fixa" : p.origem === "modelo" ? "modelo" : "—"} · {p.tentativas.length}{" "}
-                {p.tentativas.length === 1 ? "tentativa" : "tentativas"} ({aprovadas} passou) · {STATUS_PLANO[p.status]}
-                {p.valorAprovado !== null && ` · valor ajustado para ${p.valorAprovado}`}
+                {p.tentativas.length === 1 ? "tentativa" : "tentativas"} ({passaram} valeu) · {STATUS_PLANO[p.status]}
               </span>
             </summary>
+            {p.alternativas.length > 0 && (
+              <ul className="registro-alternativas">
+                {p.alternativas.map((a, i) => (
+                  <li key={i}>
+                    <b>{a.aposta}</b> · {a.janela} · {a.segmentoRotulo} · {a.beneficio} · teto {formatarMoeda(a.custoMaximo)}
+                    {p.alternativaAprovada === i && <span className="selo selo-resgatado">aprovada</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {p.propostaAprovada && p.editada && (
+              <p className="legenda registro-editada">
+                Aprovada com edição: {NOMES_DIA[p.propostaAprovada.dia_semana]}{" "}
+                {formatarHora(p.propostaAprovada.hora_inicio)}–{formatarHora(p.propostaAprovada.hora_fim)} ·{" "}
+                {rotuloSegmento(p.propostaAprovada.segmento)} ·{" "}
+                {textoBeneficio(p.propostaAprovada.tipo, p.propostaAprovada.valor)} · teto{" "}
+                {formatarMoeda(p.propostaAprovada.teto)}
+              </p>
+            )}
             <div className="rolagem">
               <Tentativas tentativas={p.tentativas} />
             </div>

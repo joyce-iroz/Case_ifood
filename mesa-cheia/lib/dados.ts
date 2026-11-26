@@ -3,6 +3,7 @@ import { supabaseServidor } from "./supabase/server";
 import { RESTAURANTE_DEMO_ID, hojeNoFuso, horaDoTime, somarDias, type Restaurante } from "./dominio";
 import type { Segmento, VisitaCliente } from "./segmentos";
 import type { TipoBeneficio } from "./campanha";
+import { lerCampoNumero } from "./numero";
 import { calcularOcupacao, type RegistroOcupacao, type ResumoOcupacao } from "./ocupacao";
 import { DIAS_DE_HISTORICO } from "./seed";
 
@@ -212,13 +213,26 @@ export async function expirarVencidos() {
 /** Atualiza as regras. Valida faixa de cada campo; o resto do sistema lê daqui. */
 export async function atualizarRegras(entrada: unknown, id = RESTAURANTE_DEMO_ID) {
   const o = (entrada ?? {}) as Record<string, unknown>;
-  const n = (k: string) => Number(o[k]);
+  const n = (k: string) => lerCampoNumero(o[k]);
   const regras = {
     teto_mes: n("teto_mes"),
     desconto_max: n("desconto_max"),
     dias_entre_ofertas: n("dias_entre_ofertas"),
     ocupacao_min: n("ocupacao_min"),
   };
+  // NaN (texto ilegível, null, campo ausente) recebe mensagem própria antes da checagem de faixa.
+  const nomes: Record<keyof typeof regras, string> = {
+    teto_mes: "teto do mês",
+    desconto_max: "desconto máximo",
+    dias_entre_ofertas: "dias entre ofertas",
+    ocupacao_min: "ocupação mínima",
+  };
+  const naoNumero = (Object.keys(regras) as (keyof typeof regras)[]).filter((k) => Number.isNaN(regras[k]));
+  if (naoNumero.length)
+    return {
+      ok: false as const,
+      erros: naoNumero.map((k) => `${nomes[k]}: "${String(o[k] ?? "")}" não é um número válido`),
+    };
   const erros: string[] = [];
   if (!(regras.teto_mes >= 0 && regras.teto_mes <= 1_000_000)) erros.push("teto do mês entre 0 e 1.000.000");
   if (!(regras.desconto_max >= 0 && regras.desconto_max <= 100)) erros.push("desconto máximo entre 0% e 100%");

@@ -3,28 +3,37 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Regras } from "@/lib/campanha";
+import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
 
-const CAMPOS: { k: keyof Regras; rotulo: string; sufixo: string }[] = [
-  { k: "desconto_max", rotulo: "Desconto máximo", sufixo: "%" },
-  { k: "teto_mes", rotulo: "Teto do mês", sufixo: "R$" },
-  { k: "ocupacao_min", rotulo: "Ocupação mínima", sufixo: "%" },
-  { k: "dias_entre_ofertas", rotulo: "Dias entre ofertas", sufixo: "dias" },
+const CAMPOS: { k: keyof Regras; rotulo: string; sufixo: string; casas: number | [number, number] }[] = [
+  { k: "desconto_max", rotulo: "Desconto máximo", sufixo: "%", casas: [0, 2] },
+  { k: "teto_mes", rotulo: "Teto do mês", sufixo: "R$", casas: 2 },
+  { k: "ocupacao_min", rotulo: "Ocupação mínima", sufixo: "%", casas: [0, 2] },
+  { k: "dias_entre_ofertas", rotulo: "Dias entre ofertas", sufixo: "dias", casas: 0 },
 ];
 
 export function FormRegras({ regras }: { regras: Regras }) {
   const router = useRouter();
   const [valores, setValores] = useState<Record<string, string>>(
-    Object.fromEntries(CAMPOS.map((c) => [c.k, String(regras[c.k])])),
+    Object.fromEntries(CAMPOS.map((c) => [c.k, formatarNumeroBR(regras[c.k], c.casas)])),
   );
   const [estado, setEstado] = useState<{ ok: boolean; texto: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
+    const invalidos = CAMPOS.filter((c) => !Number.isFinite(lerNumeroBR(valores[c.k])));
+    if (invalidos.length) {
+      setEstado({
+        ok: false,
+        texto: `Não entendi: ${invalidos.map((c) => `${c.rotulo.toLowerCase()} "${valores[c.k]}"`).join(", ")}. Use, por exemplo, 2.400,00.`,
+      });
+      return;
+    }
     setSalvando(true);
     setEstado(null);
     try {
-      const corpo = Object.fromEntries(CAMPOS.map((c) => [c.k, Number(valores[c.k].replace(",", "."))]));
+      const corpo = Object.fromEntries(CAMPOS.map((c) => [c.k, lerNumeroBR(valores[c.k])]));
       const r = await fetch("/api/regras", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -32,6 +41,8 @@ export function FormRegras({ regras }: { regras: Regras }) {
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.erros?.join("; ") ?? j.erro ?? "Falha");
+      const salvas = j.regras as Regras;
+      setValores(Object.fromEntries(CAMPOS.map((c) => [c.k, formatarNumeroBR(salvas[c.k], c.casas)])));
       setEstado({ ok: true, texto: "Regras salvas. Valem para o formulário e para o planejador." });
       router.refresh();
     } catch (err) {
@@ -53,6 +64,12 @@ export function FormRegras({ regras }: { regras: Regras }) {
                 inputMode="decimal"
                 value={valores[c.k]}
                 onChange={(e) => setValores((v) => ({ ...v, [c.k]: e.target.value }))}
+                onBlur={() =>
+                  setValores((v) => {
+                    const n = lerNumeroBR(v[c.k]);
+                    return Number.isFinite(n) ? { ...v, [c.k]: formatarNumeroBR(n, c.casas) } : v;
+                  })
+                }
               />
               {c.sufixo !== "R$" && <span>{c.sufixo}</span>}
             </span>

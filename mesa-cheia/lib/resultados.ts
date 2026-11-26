@@ -9,7 +9,15 @@ export type LinhaResultado = {
   resgatesIncrementais: number;
   custoDescontos: number;            // soma de desconto de todos os resgates
   custoPorIncremental: number | null; // custoDescontos / resgatesIncrementais
+  resgatesCanibalizados: number;      // resgates com incremental = false: o cliente já vinha nessa janela
+  custoCanibalizado: number;          // soma dos descontos desses resgates
+  percentualIncremental: number | null; // resgatesIncrementais / resgatados, em %
 };
+
+/** Canibalizado acima desta fração do custo total recebe tom de alerta no painel. */
+export const ALERTA_CANIBALIZADO = 0.4;
+export const canibalizadoEmAlerta = (r: Pick<LinhaResultado, "custoCanibalizado" | "custoDescontos">) =>
+  r.custoDescontos > 0 && r.custoCanibalizado > ALERTA_CANIBALIZADO * r.custoDescontos;
 
 export function resumirCampanha(
   beneficios: { status: string }[],
@@ -17,6 +25,7 @@ export function resumirCampanha(
 ): LinhaResultado {
   const soma = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100;
   const inc = resgates.filter((r) => r.incremental);
+  const can = resgates.filter((r) => !r.incremental);
   const custo = soma(resgates.map((r) => r.desconto));
   return {
     emitidos: beneficios.length,
@@ -27,5 +36,8 @@ export function resumirCampanha(
     resgatesIncrementais: inc.length,
     custoDescontos: custo,
     custoPorIncremental: inc.length ? Math.round((custo / inc.length) * 100) / 100 : null,
+    resgatesCanibalizados: can.length,
+    custoCanibalizado: soma(can.map((r) => r.desconto)),
+    percentualIncremental: resgates.length ? Math.round((inc.length / resgates.length) * 1000) / 10 : null,
   };
 }

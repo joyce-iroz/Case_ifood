@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "check:seed": "tsx scripts/check-seed.ts"
+    "check:seed": "tsx scripts/check-seed.ts",
+    "test:numero": "tsx scripts/check-numero.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

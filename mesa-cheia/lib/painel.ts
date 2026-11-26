@@ -1,6 +1,7 @@
 import "server-only";
 import { carregarCampanhasCompletas, carregarClientesComVisitas, expirarVencidos, type CampanhaRegistro } from "./dados";
-import { RESTAURANTE_DEMO_ID, hojeNoFuso } from "./dominio";
+import { RESTAURANTE_DEMO_ID, hojeNoFuso, instanteNoFuso } from "./dominio";
+import { carregarKits, type Kit } from "./kit";
 import { janelaDa } from "./campanha";
 import { visitouNaJanela } from "./segmentos";
 import { resumirCampanha, type LinhaResultado } from "./resultados";
@@ -20,6 +21,8 @@ export type CampanhaPainel = {
   campanha: CampanhaRegistro;
   resultado: LinhaResultado;
   beneficios: BeneficioPainel[];
+  kit: Kit | null;
+  ativa: boolean; // a janela ainda não terminou
 };
 
 export type TelefoneTeste = {
@@ -39,6 +42,8 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     carregarCampanhasCompletas(id),
     carregarClientesComVisitas(id),
   ]);
+  const kits = await carregarKits(campanhas.map((c) => c.id));
+  const agoraMs = Date.now();
   const cliente = new Map(base.clientes.map((c) => [c.id, c]));
   const resgateDe = new Map(resgates.map((r) => [r.beneficio_id, r]));
 
@@ -48,6 +53,8 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     const ordem = { resgatado: 0, emitido: 1, expirado: 2 } as const;
     return {
       campanha: c,
+      kit: kits.get(c.id) ?? null,
+      ativa: new Date(instanteNoFuso(c.data_janela, c.hora_fim)).getTime() > agoraMs,
       resultado: resumirCampanha(bs, rs),
       beneficios: bs
         .map((b) => {

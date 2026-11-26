@@ -87,6 +87,7 @@ export function montarCardapio(
 }
 
 export type SaidaModelo = {
+  aposta: string;
   dia_semana: string;
   hora_inicio: string;
   hora_fim: string;
@@ -98,11 +99,9 @@ export type SaidaModelo = {
   justificativa: string;
 };
 
-export type Validacao =
-  | { ok: true; saida: SaidaModelo; proposta: PropostaCampanha; janela: JanelaCardapio }
-  | { ok: false; erros: string[] };
+export type AlternativaValida = { saida: SaidaModelo; proposta: PropostaCampanha; janela: JanelaCardapio };
 
-const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 /** Tira cercas de código e lê o JSON. */
 export function lerJson(texto: string): unknown {
@@ -110,94 +109,139 @@ export function lerJson(texto: string): unknown {
   return JSON.parse(limpo);
 }
 
-/**
- * Confere a resposta do modelo contra o cardápio. Cada erro vira uma frase que
- * volta ao modelo na próxima tentativa e fica no registro de auditoria.
- */
-export function validarSaida(texto: string, cardapio: Cardapio): Validacao {
-  let bruto: unknown;
-  try {
-    bruto = lerJson(texto);
-  } catch {
-    return { ok: false, erros: ["a resposta não é um JSON válido"] };
-  }
-  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto))
-    return { ok: false, erros: ["a resposta precisa ser um objeto JSON"] };
-  const o = bruto as Record<string, unknown>;
-  const erros: string[] = [];
+export const tipoDoCardapio = (t: PropostaCampanha["tipo"]): TipoSaida =>
+  t === "percentual" ? "desconto_percentual" : "desconto_valor";
 
-  const chaves = ["dia_semana", "hora_inicio", "hora_fim", "segmento", "tipo", "valor", "clientes_alvo", "custo_maximo", "justificativa"];
+/** A janela do cardápio com o mesmo dia e horas, se existir. */
+export function janelaDoCardapio(cardapio: Cardapio, dia: number, inicio: number, fim: number): JanelaCardapio | undefined {
+  return cardapio.janelas_candidatas.find(
+    (j) => j.dia_semana === DIAS_TEXTO[dia] && lerHHMM(j.hora_inicio) === inicio && lerHHMM(j.hora_fim) === fim,
+  );
+}
+
+/**
+ * A proposta cabe no cardápio daquele planejamento? Janela entre as candidatas,
+ * segmento com elegíveis nela, valor da lista do tipo (e ≤ desconto_max), teto da
+ * lista da janela (e ≤ saldo). Serve à resposta do modelo, à prévia e à aprovação:
+ * o que vem do navegador passa por aqui como qualquer entrada não confiável.
+ */
+export function validarContraCardapio(p: PropostaCampanha, cardapio: Cardapio): { erros: string[]; janela?: JanelaCardapio } {
+  const erros: string[] = [];
+  const janela = janelaDoCardapio(cardapio, p.dia_semana, p.hora_inicio, p.hora_fim);
+  if (!janela) {
+    erros.push(
+      `a janela ${DIAS_TEXTO[p.dia_semana] ?? p.dia_semana} ${hhmm(p.hora_inicio)}–${hhmm(p.hora_fim)} não está na lista de janelas_candidatas`,
+    );
+  } else if (!ehSegmento(p.segmento)) {
+    erros.push(`segmento "${String(p.segmento)}" não existe`);
+  } else if (janela.segmentos[p.segmento].elegiveis === 0) {
+    erros.push(`o segmento ${p.segmento} não tem clientes elegíveis nessa janela`);
+  }
+
+  const tipo = tipoDoCardapio(p.tipo);
+  if (p.tipo === "percentual" && p.valor > cardapio.regras.desconto_max)
+    erros.push(`valor ${p.valor}% está acima do desconto_max de ${cardapio.regras.desconto_max}%`);
+  const lista = cardapio.valores_permitidos[tipo];
+  if (!lista.includes(p.valor))
+    erros.push(`valor ${p.valor} não está em valores_permitidos.${tipo} (${lista.join(", ") || "lista vazia"})`);
+
+  if (janela) {
+    if (p.teto > janela.saldo_teto_mes)
+      erros.push(`custo_maximo ${p.teto} passa do saldo do teto do mês (${janela.saldo_teto_mes})`);
+    if (!janela.custos_maximos_permitidos.includes(p.teto))
+      erros.push(`custo_maximo ${p.teto} não está em custos_maximos_permitidos (${janela.custos_maximos_permitidos.join(", ")})`);
+  }
+  return { erros, janela };
+}
+
+/** Uma alternativa do modelo: formato do contrato, depois o cardápio. */
+function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: AlternativaValida } | { ok: false; erros: string[] } {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return { ok: false, erros: ["precisa ser um objeto JSON"] };
+  const o = bruto as Record<string, unknown>;
+  const chaves = ["aposta", "dia_semana", "hora_inicio", "hora_fim", "segmento", "tipo", "valor", "clientes_alvo", "custo_maximo", "justificativa"];
   const faltam = chaves.filter((k) => !(k in o));
   if (faltam.length) return { ok: false, erros: [`faltam as chaves: ${faltam.join(", ")}`] };
 
+  const erros: string[] = [];
+  const aposta = typeof o.aposta === "string" ? o.aposta.trim() : "";
+  if (!aposta || aposta.length > 40) erros.push("aposta precisa ser um rótulo curto (até 40 caracteres)");
   const dia = DIAS_TEXTO.indexOf(semAcento(String(o.dia_semana)) as (typeof DIAS_TEXTO)[number]);
   const inicio = lerHHMM(o.hora_inicio);
   const fim = lerHHMM(o.hora_fim);
   if (dia < 0) erros.push(`dia_semana "${o.dia_semana}" inválido; use ${DIAS_TEXTO.join(", ")}`);
   if (inicio === null || fim === null) erros.push("hora_inicio e hora_fim precisam ser HH:MM em hora cheia ou meia hora");
-
-  const janela = cardapio.janelas_candidatas.find(
-    (j) => j.dia_semana === DIAS_TEXTO[dia] && lerHHMM(j.hora_inicio) === inicio && lerHHMM(j.hora_fim) === fim,
-  );
-  if (dia >= 0 && inicio !== null && fim !== null && !janela)
-    erros.push(
-      `a janela ${o.dia_semana} ${o.hora_inicio}–${o.hora_fim} não está na lista de janelas_candidatas; copie dia e horas de uma delas`,
-    );
-
-  const segmento = o.segmento;
-  const alvo = Number(o.clientes_alvo);
-  if (!ehSegmento(segmento)) {
-    erros.push(`segmento "${String(segmento)}" não existe; use ${SEGMENTOS.map((s) => s.id).join(", ")}`);
-  } else if (janela) {
-    const disponiveis = janela.segmentos[segmento].elegiveis;
-    if (disponiveis === 0) erros.push(`o segmento ${segmento} não tem clientes elegíveis nessa janela`);
-    else if (!Number.isInteger(alvo) || alvo <= 0) erros.push("clientes_alvo precisa ser um inteiro positivo");
-    else if (alvo > disponiveis)
-      erros.push(`clientes_alvo ${alvo} é maior que os ${disponiveis} elegíveis de ${segmento} nessa janela`);
-  }
-
+  if (!ehSegmento(o.segmento)) erros.push(`segmento "${String(o.segmento)}" não existe; use ${SEGMENTOS.map((x) => x.id).join(", ")}`);
   const tipo = o.tipo as TipoSaida;
+  if (!(tipo in TIPOS_SAIDA)) erros.push(`tipo "${String(o.tipo)}" inválido; use desconto_percentual ou desconto_valor`);
   const valor = Number(o.valor);
-  if (!(tipo in TIPOS_SAIDA)) {
-    erros.push(`tipo "${String(o.tipo)}" inválido; use desconto_percentual ou desconto_valor`);
-  } else if (!Number.isFinite(valor)) {
-    erros.push("valor precisa ser número");
-  } else {
-    const max = cardapio.regras.desconto_max;
-    if (tipo === "desconto_percentual" && valor > max)
-      erros.push(`valor ${valor}% está acima do desconto_max de ${max}%`);
-    const lista = cardapio.valores_permitidos[tipo];
-    if (!lista.includes(valor))
-      erros.push(`valor ${valor} não está em valores_permitidos.${tipo} (${lista.join(", ") || "lista vazia"})`);
-  }
-
   const custo = Number(o.custo_maximo);
+  const alvo = Number(o.clientes_alvo);
+  if (!Number.isFinite(valor)) erros.push("valor precisa ser número");
   if (!Number.isFinite(custo)) erros.push("custo_maximo precisa ser número");
-  else if (janela) {
-    if (custo > janela.saldo_teto_mes)
-      erros.push(`custo_maximo ${custo} passa do saldo do teto do mês (${janela.saldo_teto_mes})`);
-    if (!janela.custos_maximos_permitidos.includes(custo))
-      erros.push(`custo_maximo ${custo} não está em custos_maximos_permitidos (${janela.custos_maximos_permitidos.join(", ")})`);
-  }
-
   const just = typeof o.justificativa === "string" ? o.justificativa.trim() : "";
   if (just.length < 20 || just.length > 700) erros.push("justificativa precisa ter de duas a três frases");
+  if (erros.length) return { ok: false, erros };
 
-  if (erros.length || !janela) return { ok: false, erros: erros.length ? erros : ["janela inválida"] };
+  const proposta: PropostaCampanha = {
+    dia_semana: dia,
+    hora_inicio: inicio!,
+    hora_fim: fim!,
+    segmento: o.segmento as Segmento,
+    tipo: TIPOS_SAIDA[tipo],
+    valor,
+    teto: custo,
+  };
+  const { erros: doCardapio, janela } = validarContraCardapio(proposta, cardapio);
+  erros.push(...doCardapio);
+  if (janela && ehSegmento(o.segmento)) {
+    const disponiveis = janela.segmentos[o.segmento].elegiveis;
+    if (!Number.isInteger(alvo) || alvo <= 0) erros.push("clientes_alvo precisa ser um inteiro positivo");
+    else if (alvo > disponiveis) erros.push(`clientes_alvo ${alvo} é maior que os ${disponiveis} elegíveis de ${o.segmento} nessa janela`);
+  }
+  if (erros.length || !janela) return { ok: false, erros };
   return {
     ok: true,
-    janela,
-    saida: { ...(o as SaidaModelo), justificativa: just, valor, custo_maximo: custo, clientes_alvo: alvo },
-    proposta: {
-      dia_semana: dia,
-      hora_inicio: inicio!,
-      hora_fim: fim!,
-      segmento: segmento as Segmento,
-      tipo: TIPOS_SAIDA[tipo],
-      valor,
-      teto: custo,
+    alt: {
+      janela,
+      proposta,
+      saida: { ...(o as SaidaModelo), aposta, justificativa: just, valor, custo_maximo: custo, clientes_alvo: alvo },
     },
   };
+}
+
+/**
+ * A resposta do modelo deve ser um array de 3 alternativas. Cada uma é validada
+ * sozinha; as inválidas são descartadas com o motivo. Duas com a mesma janela e o
+ * mesmo segmento contam como uma: a segunda é descartada.
+ */
+export function validarAlternativas(texto: string, cardapio: Cardapio): { validas: AlternativaValida[]; erros: string[] } {
+  let bruto: unknown;
+  try {
+    bruto = lerJson(texto);
+  } catch {
+    return { validas: [], erros: ["a resposta não é um JSON válido"] };
+  }
+  const lista = Array.isArray(bruto)
+    ? bruto
+    : bruto && typeof bruto === "object" && Array.isArray((bruto as { propostas?: unknown }).propostas)
+      ? (bruto as { propostas: unknown[] }).propostas
+      : null;
+  if (!lista) return { validas: [], erros: ["a resposta precisa ser um array JSON com 3 propostas"] };
+
+  const erros: string[] = [];
+  if (lista.length !== 3) erros.push(`vieram ${lista.length} propostas; o pedido é de exatamente 3`);
+  const validas: AlternativaValida[] = [];
+  lista.slice(0, 3).forEach((item, i) => {
+    const v = validarItem(item, cardapio);
+    if (!v.ok) return erros.push(...v.erros.map((e) => `proposta ${i + 1}: ${e}`));
+    const repetida = validas.find(
+      (x) => x.janela === v.alt.janela && x.proposta.segmento === v.alt.proposta.segmento,
+    );
+    if (repetida)
+      return erros.push(`proposta ${i + 1}: repete janela e segmento de outra; as três devem diferir em janela ou segmento`);
+    validas.push(v.alt);
+  });
+  return { validas, erros };
 }
 
 /**
@@ -228,6 +272,7 @@ export function propostaFallback(cardapio: Cardapio): { saida: SaidaModelo; prop
     return {
       notas,
       saida: {
+        aposta: "regra fixa",
         dia_semana: j.dia_semana,
         hora_inicio: j.hora_inicio,
         hora_fim: j.hora_fim,

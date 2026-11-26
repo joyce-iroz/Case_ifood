@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { calcularDesconto } from "@/lib/campanha";
 import { FUSO, formatarMoeda } from "@/lib/dominio";
 import { mascararTelefone } from "@/lib/telefone";
+import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
 import type { RespostaConsulta, RespostaResgate } from "@/lib/resgate";
 
 type Estado =
@@ -22,8 +23,6 @@ const dataHora = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-/** "120,50", "1.234,50" e "120.50" viram número. */
-const lerValor = (s: string) => Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s);
 
 export function Salao() {
   const [digitos, setDigitos] = useState("");
@@ -64,7 +63,7 @@ export function Salao() {
   const ativo = estado.fase === "resposta" && estado.r.tipo === "ativo";
 
   return (
-    <div className="salao">
+    <div className={`salao ${ativo ? "com-beneficio" : ""}`}>
       {!emResposta && <p className="visor-rotulo">Telefone do cliente</p>}
       <Visor digitos={digitos} compacto={emResposta} />
 
@@ -197,7 +196,7 @@ function CartaoAtivo({
   const [erro, setErro] = useState<string | null>(null);
   const travado = useRef(false); // segura toque duplo antes do re-render
 
-  const valorConta = lerValor(conta);
+  const valorConta = lerNumeroBR(conta);
   const previa = calcularDesconto(r.calculo, valorConta, r.calculo.descontoMax, r.calculo.tetoRestante);
   const podeAplicar = valorConta > 0 && !enviando;
 
@@ -239,15 +238,19 @@ function CartaoAtivo({
         </div>
 
         <label className="campo-conta">
-          Valor da conta
+          <span className="so-leitor">Valor da conta</span>
           <span className="campo-moeda">
             <span>R$</span>
             <input
               inputMode="decimal"
               autoComplete="off"
-              placeholder="0,00"
+              placeholder="valor da conta"
               value={conta}
               onChange={(e) => setConta(e.target.value.replace(/[^\d,.]/g, ""))}
+              onBlur={() => {
+                const n = lerNumeroBR(conta);
+                if (Number.isFinite(n)) setConta(formatarNumeroBR(n));
+              }}
               autoFocus
             />
           </span>
@@ -267,6 +270,13 @@ function CartaoAtivo({
         </div>
         {erro && <p className="salao-status">{erro}</p>}
       </div>
+
+      {r.script && (
+        <figure className="fala">
+          <figcaption>O que dizer ao cliente</figcaption>
+          <blockquote>{r.script}</blockquote>
+        </figure>
+      )}
 
       <div className="espaco" />
       <button className="botao-grande primario" onClick={aplicar} disabled={!podeAplicar}>

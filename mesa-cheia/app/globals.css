@@ -466,3 +466,77 @@ code, .mono { font-family: var(--fonte-mono); }
 .proposta-lado { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 @media (min-width: 900px) { .proposta-corpo { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; } }
 .justificativa { display: flex; flex-direction: column; gap: 6px; }
+
+/* resultado: canibalizado acima de 40% do custo */
+.tabela { min-width: 1020px; }
+.tabela td.alerta-canibal { color: var(--vermelho); font-weight: 600; }
+.tabela td.alerta-canibal .sub { color: var(--vermelho-texto-fraco); font-weight: 400; }
+
+/* salão: frase do kit, acima do Aplicar */
+.fala { margin: 0; padding: 14px 16px; border-radius: 16px; background: var(--superficie); border: 1px solid var(--borda-forte); border-left-width: 1px; display: flex; flex-direction: column; gap: 6px; }
+.fala figcaption { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--vermelho); }
+.fala blockquote { margin: 0; font-size: 18px; line-height: 1.4; color: var(--texto); }
+
+/* kit de ativação */
+.metrica-kit { margin: 0 0 14px; font-size: 14px; color: var(--texto-suave); }
+.metrica-kit b { color: var(--texto); font-family: var(--fonte-titulo); font-size: 17px; }
+.kit { display: flex; flex-direction: column; gap: 14px; }
+.kit-campanhas { display: flex; flex-wrap: wrap; gap: 6px; }
+.kit-campanhas .opcao { padding: 0 12px; }
+.kit-cabeca { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.kit-abas { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: var(--rebaixo); border: 1px solid #1f1f22; }
+.kit-abas button { font: inherit; font-size: 14px; min-height: 40px; padding: 0 14px; border-radius: 9px; border: 0; background: transparent; color: var(--texto-suave); cursor: pointer; flex: 1 1 auto; }
+.kit-abas button[aria-selected="true"] { background: #26262a; color: var(--texto); font-weight: 600; }
+.kit-painel { display: flex; flex-direction: column; gap: 10px; }
+.kit-script { margin: 0; font-size: 20px; line-height: 1.45; color: var(--texto); max-width: 760px; }
+.kit-mensagem { margin: 0; white-space: pre-wrap; line-height: 1.55; color: var(--texto-2); max-width: 760px; padding: 14px 16px; border-radius: 12px; background: var(--rebaixo); }
+.kit-cartaz { align-self: flex-start; display: flex; flex-direction: column; gap: 8px; padding: 22px 26px; border-radius: 14px; background: var(--texto); color: var(--fundo); max-width: 420px; }
+.kit-cartaz strong { font-family: var(--fonte-titulo); font-size: 26px; line-height: 1.1; letter-spacing: -0.01em; }
+.kit-cartaz span { font-size: 15px; line-height: 1.4; }
+.kit-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+/* planejador: três alternativas, editor e prévia */
+.alternativas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.alternativa { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 14px; background: var(--rebaixo); border: 1px solid var(--borda-forte); min-width: 0; }
+.alternativa p { margin: 0; }
+.alternativa.selecionada { border-color: var(--vermelho); background: #150b0a; }
+.alternativa-cabeca { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.aposta { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vermelho); }
+.alternativa .proposta-janela { font-size: 26px; }
+.alternativa .justificativa { flex: 1; }
+.alternativa .botao { min-height: 44px; }
+.botao.selecionado { border-color: var(--vermelho); color: var(--vermelho); }
+.editor { display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 14px; border: 1px solid var(--vermelho-borda); background: var(--rebaixo); }
+.editor h3 { margin: 0; font-family: var(--fonte-titulo); font-size: 17px; font-weight: 600; }
+.editor-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.editor-campos select { font: inherit; font-size: 15px; color: var(--texto); background: var(--superficie-2); border: 1px solid var(--borda-forte); border-radius: 10px; min-height: 44px; padding: 0 10px; width: 100%; }
+.previa { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; transition: opacity 0.15s; }
+.previa.carregando { opacity: 0.55; }
+.previa > div { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 10px; background: var(--superficie); }
+.previa span { font-size: 12px; color: var(--texto-suave); }
+.previa b { font-family: var(--fonte-titulo); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.previa-bloqueios { grid-column: 1 / -1; margin: 0; padding: 10px 14px 10px 30px; border-radius: 10px; background: var(--vermelho-fundo); border: 1px solid var(--vermelho-borda); color: var(--vermelho-texto-medio); font-size: 14px; }
+.alerta-texto { color: var(--vermelho); }
+.proposta-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.proposta-acoes .botao.primario { min-width: 160px; }
+.motivo-bloqueio { font-size: 13px; color: var(--texto-suave); flex: 1 1 240px; }
+.motivo-bloqueio.alerta { color: var(--vermelho-texto-fraco); }
+.registro-alternativas { margin: 0; padding: 0 16px 10px 34px; font-size: 13px; color: var(--texto-2); display: flex; flex-direction: column; gap: 4px; }
+.registro-alternativas .selo { margin-left: 8px; }
+.registro-editada { padding: 0 16px 10px; }
+
+/* salão com benefício: cabe numa tela de celular com a frase e o Aplicar visíveis */
+.so-leitor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.salao.com-beneficio { gap: 10px; }
+.salao.com-beneficio .visor.compacto { font-size: 20px; padding: 10px 8px; }
+.salao.com-beneficio .cartao.ativo { padding: 14px 16px; gap: 10px; }
+.salao.com-beneficio .cartao-destaque { font-size: 30px; }
+.salao.com-beneficio .campo-moeda { padding: 4px 14px; }
+.salao.com-beneficio .campo-moeda input { font-size: 26px; }
+.salao.com-beneficio .campo-moeda input::placeholder { font-size: 18px; font-family: var(--fonte-texto); font-weight: 400; color: var(--apagado); }
+.salao.com-beneficio .parciais div { padding: 8px 12px; }
+.salao.com-beneficio .parciais b { font-size: 18px; }
+.salao.com-beneficio .fala { padding: 12px 14px; gap: 4px; }
+.salao.com-beneficio .fala blockquote { font-size: 16px; }
+.salao.com-beneficio .botao-grande.primario { min-height: 58px; }
+.salao.com-beneficio .botao-grande:not(.primario) { min-height: 48px; }

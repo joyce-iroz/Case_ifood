@@ -12,6 +12,7 @@ import {
   type Restaurante,
 } from "./dominio";
 import { ehSegmento, type Janela, type Segmento } from "./segmentos";
+import { lerCampoNumero } from "./numero";
 
 export type TipoBeneficio = "percentual" | "valor_fixo";
 export const ehTipo = (x: unknown): x is TipoBeneficio => x === "percentual" || x === "valor_fixo";
@@ -38,14 +39,14 @@ export type Regras = {
 };
 
 export type Bloqueio = {
-  regra: "dados" | "janela" | "desconto_max" | "ocupacao_min" | "teto_mes" | "dias_entre_ofertas";
+  regra: "dados" | "janela" | "desconto_max" | "ocupacao_min" | "teto_mes" | "dias_entre_ofertas" | "cardapio";
   mensagem: string;
 };
 
 /** Converte entrada desconhecida (JSON do formulário ou da IA) em proposta, ou diz o que está errado. */
 export function lerProposta(x: unknown): { proposta: PropostaCampanha } | { bloqueios: Bloqueio[] } {
   const o = (x ?? {}) as Record<string, unknown>;
-  const num = (k: string) => (typeof o[k] === "number" ? (o[k] as number) : Number(o[k]));
+  const num = (k: string) => lerCampoNumero(o[k]);
   const p = {
     dia_semana: num("dia_semana"),
     hora_inicio: num("hora_inicio"),

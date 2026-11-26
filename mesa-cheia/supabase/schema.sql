@@ -4,6 +4,7 @@
 -- Depois, popule com POST /api/reset (ou o botão "Resetar demo").
 
 drop function if exists resgatar_beneficio(uuid, numeric, numeric, boolean, date, smallint);
+drop table if exists kits cascade;
 drop table if exists planejamento_tentativas cascade;
 drop table if exists planejamentos cascade;
 drop table if exists resgates   cascade;
@@ -119,6 +120,20 @@ create table resgates (
 );
 create index resgates_criado_idx on resgates (criado_em);  -- consumo do teto_mes
 
+-- Kit de ativação: textos para a equipe divulgar a campanha. Gerado uma vez, na aprovação.
+-- Só texto exibido; não toca em valor, teto, emissão nem resgate.
+create table kits (
+  id               uuid primary key default gen_random_uuid(),
+  campanha_id      uuid not null unique references campanhas(id) on delete cascade,  -- um kit por campanha
+  script_garcom    text not null,
+  mensagem_equipe  text not null,
+  cartaz_titulo    text not null,
+  cartaz_linha     text not null,
+  modelo           text,                      -- null = montado por template fixo
+  criado_em        timestamptz not null default now(),
+  entregue_em      timestamptz                -- † quando o dono copiou a mensagem para a equipe
+);
+
 -- Planejador de campanhas (IA). Só auditoria: campanhas não sabem quem as criou.
 -- Um planejamento é um clique em "Gerar proposta"; cada chamada ao modelo é uma tentativa.
 create table planejamentos (
@@ -127,11 +142,14 @@ create table planejamentos (
   criado_em       timestamptz not null default now(),
   origem          text not null check (origem in ('modelo', 'fallback', 'nenhuma')),
   modelo          text,                       -- id do modelo chamado
-  proposta        jsonb,                      -- PropostaCampanha validada (null se nenhuma)
-  apresentacao    jsonb,                      -- o que o cartão mostra: justificativa, janela, contagens
+  cardapio        jsonb,                      -- opções calculadas em código que o modelo recebeu; o editor fica restrito a elas
+  proposta        jsonb,                      -- array de PropostaCampanha validadas (as alternativas)
+  apresentacao    jsonb,                      -- {alternativas: [...], aprovada} ou {motivo}
   status          text not null default 'proposta'
                     check (status in ('proposta', 'aprovada', 'descartada', 'sem_proposta')),
-  valor_aprovado  numeric(10,2),              -- valor após "Ajustar valor", se mudou
+  alternativa_aprovada smallint,              -- índice da alternativa escolhida
+  proposta_aprovada    jsonb,                 -- a proposta que virou campanha, já revalidada
+  editada              boolean,               -- o dono mudou algum campo antes de aprovar
   campanha_id     uuid references campanhas(id) on delete set null,
   decidido_em     timestamptz
 );
@@ -167,6 +185,7 @@ alter table beneficios   enable row level security;
 alter table resgates     enable row level security;
 alter table visitas      enable row level security;
 alter table planejamentos enable row level security;
+alter table kits enable row level security;
 alter table planejamento_tentativas enable row level security;
 alter table regras       enable row level security;
 

@@ -33,11 +33,16 @@ ticket médio R$ 78, terça a domingo, 11h–15h e 18h–23h), com id fixo
 Feito: schema, seed (`POST /api/reset`), grade de ocupação, criação de
 campanha por formulário com emissão de benefícios, tela do salão (consulta por
 telefone e resgate), resultado por campanha, painel "Telefones de teste",
-editor de regras e o planejador de campanhas com IA (Gemini Flash-Lite).
+editor de regras, planejador de campanhas com IA (três alternativas, editor
+restrito ao cardápio, prévia ao vivo), kit de ativação gerado por IA e métricas
+de incremental × canibalizado.
 
-O planejador é o único ponto com IA. Ele produz uma `PropostaCampanha` e, ao
-aprovar, chama `criarCampanha`, exatamente como o formulário. Nada fora do
-planejador sabe quem criou a campanha.
+A IA entra em dois pontos, e nos dois só escolhe ou escreve:
+1. Planejador: escolhe alternativas dentro de um cardápio calculado em código.
+   Ao aprovar, a proposta vai para `criarCampanha`, como o formulário.
+2. Kit de ativação: escreve texto (script do garçom, mensagem da equipe,
+   cartaz). Nunca número, nunca decisão de dinheiro.
+Nada fora do planejador sabe quem criou a campanha.
 
 ## Stack
 
@@ -80,11 +85,14 @@ app/
   api/salao/aplicar      POST {beneficio_id, valor_conta}: resgate idempotente
   api/janelas            GET: janelas candidatas cruas + cardápio enviado ao modelo
   api/planejador         GET: registro de auditoria · POST: gera proposta
-  api/planejador/[id]/aprovar    POST {valor?}: criarCampanha com a proposta gravada
+  api/planejador/[id]/previa     POST {proposta}: revalida, devolve elegíveis/custo/saldo/bloqueios
+  api/planejador/[id]/aprovar    POST {indice, proposta?}: revalida e chama criarCampanha
   api/planejador/[id]/descartar  POST
+  api/kits/[campanhaId]/entregue POST: dono copiou a mensagem da equipe
   api/regras             GET / PATCH
 components/
-  BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx   cliente
+  BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx,
+  KitAtivacao.tsx        componentes de cliente
   Tentativas.tsx         lista de tentativas do modelo (sem estado)
   Marca.tsx              logo (server)
 lib/
@@ -98,6 +106,9 @@ lib/
   planejador-regras.ts   cardápio, validação da saída do modelo, regra fixa (puro)
   planejador.ts          gerar/aprovar/descartar/listar ("server-only")
   gemini.ts              chamada REST ao Gemini ("server-only")
+  kit-regras.ts          validação e template do kit, conferência de números (puro)
+  kit.ts                 gerarKit, carregarKits, marcarKitEntregue ("server-only")
+  numero.ts              lerNumeroBR, formatarNumeroBR, lerCampoNumero (puro)
   segmentos.ts           segmentos e visitouNaJanela (puro)
   resultados.ts          métricas por campanha (puro)
   ocupacao.ts            cálculo da grade (puro)
@@ -107,6 +118,7 @@ lib/
   seed.ts                gerador determinístico dos dados da demo
   erros.ts               erro → status HTTP
 scripts/check-seed.ts
+scripts/check-numero.ts  npm run test:numero
 supabase/schema.sql      colar no SQL Editor do Supabase
 ```
 
@@ -199,22 +211,53 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   2. Código monta o cardápio (`montarCardapio`): por janela, elegíveis por
      segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`); valores
      permitidos por tipo (`opcoesValor`, todos ≤ `desconto_max`).
-  3. O modelo devolve o JSON do contrato (`dia_semana` "terca", `hora_inicio`
-     "18:30", `tipo` "desconto_percentual" | "desconto_valor", `valor`,
-     `clientes_alvo`, `custo_maximo`, `justificativa`).
-  4. `validarSaida` confere tudo contra o cardápio; depois `avaliarProposta`
-     aplica as mesmas regras do formulário. Reprovou: chama de novo com os
-     erros, até 3 vezes. Depois, `propostaFallback`: janela com mais cadeiras
-     vazias, segmento com mais elegíveis, 10% (ou o máximo permitido, se
-     menor), metade do saldo do mês como teto. `origem` = `fallback`.
+  3. O modelo devolve um array de 3 alternativas no contrato (`aposta`,
+     `dia_semana` "terca", `hora_inicio` "18:30", `tipo` "desconto_percentual" |
+     "desconto_valor", `valor`, `clientes_alvo`, `custo_maximo`,
+     `justificativa`), diferindo em janela ou segmento.
+  4. `validarAlternativas` confere cada uma sozinha (formato + `validarContraCardapio`);
+     duplicadas em janela+segmento são descartadas; as que sobram passam por
+     `avaliarProposta`. Basta uma sobrar para a tentativa valer. Nenhuma: chama
+     de novo com os erros, até 3 vezes. Depois, `propostaFallback`: janela com
+     mais cadeiras vazias, segmento com mais elegíveis, 10% (ou o máximo
+     permitido, se menor), metade do saldo do mês como teto. `origem` = `fallback`.
   5. Cada tentativa vai para `planejamento_tentativas` (resposta crua, passou,
-     erros). Só uma proposta fica aguardando decisão; gerar outra descarta a
-     anterior.
-  6. Aprovar usa a proposta gravada no banco (não a do navegador), aplica o
-     valor ajustado e chama `criarCampanha`. Se bloquear, a proposta volta a
-     aguardar decisão.
+     erros, inclusive das alternativas descartadas). O cardápio fica gravado em
+     `planejamentos.cardapio`. Só um planejamento aguarda decisão por vez.
+  6. O dono seleciona uma alternativa e pode editá-la; cada campo é lista
+     fechada do cardápio gravado (trocar a janela recarrega segmento e teto).
+     A prévia (`previaPlanejamento`) e a aprovação (`aprovarPlanejamento`)
+     passam pela mesma `revalidar`: **a proposta do navegador é entrada não
+     confiável**, relida com `lerProposta`, conferida contra o cardápio DAQUELE
+     planejamento e contra `avaliarProposta`. Nada entra porque o cliente disse
+     que é válido. Se bloquear, a proposta volta a aguardar decisão.
+  O formulário manual NÃO tem restrição de cardápio, de propósito: quem quer
+  campanha em janela cheia usa ele. O editor é restrito porque existe para
+  fazer yield.
   O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
   Sem `GEMINI_API_KEY`, a tentativa registra o erro e vai direto à regra fixa.
+- **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
+  chama `gerarKit` uma vez (formulário e planejador, sem distinção). Nunca no
+  carregamento de página. Validação (`validarKit`): 4 campos de texto não
+  vazios, `script_garcom` ≤ 45 palavras, `cartaz_titulo` ≤ 6 palavras, e
+  `conferirNumeros`: todo "N%" ou "R$ N" escrito tem de ser o benefício da
+  campanha (o garçom lê em voz alta). Falhou: mais uma tentativa com os erros;
+  falhou de novo: `kitTemplate`, `modelo` = null. `gerarKit` nunca lança: a
+  campanha não quebra por causa do kit. Nome e cozinha do restaurante entram
+  no prompt como dados não confiáveis; a saída só é exibida, não toca valor,
+  teto, emissão nem resgate. O salão mostra o `script_garcom` acima do Aplicar
+  ("O que dizer ao cliente"). Kit "entregue" = o dono copiou a mensagem da
+  equipe (`kits.entregue_em`); a métrica "X de Y" no painel conta isso.
+- **Números digitados** passam sempre por `lerNumeroBR` (lib/numero.ts):
+  com vírgula, pontos são milhar e a vírgula é decimal; sem vírgula, pontos
+  em grupos de três são milhar ("2.000" = 2000). Nenhum componente faz parsing
+  próprio. Ao sair do campo, o valor é reformatado ("2.400,00"). No servidor,
+  `lerCampoNumero`; NaN é recusado com mensagem própria.
+- **Incremental × canibalizado** (`resumirCampanha`): `resgatesCanibalizados`
+  = resgates com `incremental = false`; `custoCanibalizado` = soma dos
+  descontos deles; `percentualIncremental` = incrementais / resgatados. O
+  painel pinta o canibalizado de alerta acima de 40% do custo
+  (`canibalizadoEmAlerta`).
 - **Janelas em meia hora.** `hora_inicio`/`hora_fim` são números em horas com
   ,5 para meia hora (18.5 = 18h30); `timeDaHora`/`horaDoTime`/`formatarHora`
   convertem. Uma visita registrada na hora cheia h conta para a janela se a
@@ -297,8 +340,8 @@ visita entre 61 e 240 dias atrás).
 | id | uuid pk | |
 | restaurante_id | uuid fk → restaurantes, cascade | |
 | dia_semana | smallint 0–6 | igual ao dia de `data_janela` |
-| hora_inicio | time | hora cheia |
-| hora_fim | time | hora cheia, exclusiva, > hora_inicio |
+| hora_inicio | time | hora cheia ou meia hora |
+| hora_fim | time | exclusiva, > hora_inicio |
 | segmento | text | `frequenta_janela` \| `frequenta_outras` \| `delivery_nunca_veio` \| `sumiu_60_dias` |
 | tipo | text | `percentual` (valor em %) \| `valor_fixo` (valor em R$) |
 | valor | numeric(10,2) | > 0 |
@@ -354,10 +397,13 @@ visita entre 61 e 240 dias atrás).
 | criado_em | timestamptz | |
 | origem | text | `modelo` \| `fallback` \| `nenhuma` |
 | modelo | text null | id do modelo chamado |
-| proposta | jsonb null | PropostaCampanha validada |
-| apresentacao | jsonb | o que o cartão mostra (ou `{motivo}`) |
+| cardapio | jsonb null | opções calculadas que o modelo recebeu; o editor e a aprovação ficam restritos a elas |
+| proposta | jsonb null | array das PropostaCampanha validadas (alternativas) |
+| apresentacao | jsonb | `{alternativas: [...], aprovada}` ou `{motivo}` |
 | status | text | `proposta` \| `aprovada` \| `descartada` \| `sem_proposta` |
-| valor_aprovado | numeric null | valor após "Ajustar valor" |
+| alternativa_aprovada | smallint null | índice da alternativa escolhida |
+| proposta_aprovada | jsonb null | a proposta que virou campanha, já revalidada |
+| editada | boolean null | o dono mudou algum campo antes de aprovar |
 | campanha_id | uuid null fk → campanhas, set null | só auditoria |
 | decidido_em | timestamptz null | |
 
@@ -371,6 +417,19 @@ visita entre 61 e 240 dias atrás).
 | aprovada | boolean | passou na validação |
 | erros | jsonb | frases que reprovaram (voltam ao modelo) |
 | ms | integer | duração da chamada |
+
+### kits
+| coluna | tipo | nota |
+|---|---|---|
+| id | uuid pk | |
+| campanha_id | uuid fk → campanhas, cascade, unique | um kit por campanha |
+| script_garcom | text | ≤ 45 palavras |
+| mensagem_equipe | text | |
+| cartaz_titulo | text | ≤ 6 palavras |
+| cartaz_linha | text | |
+| modelo | text null | null = template fixo |
+| criado_em | timestamptz | |
+| entregue_em † | timestamptz null | quando o dono copiou a mensagem da equipe |
 
 ### Função `resgatar_beneficio`
 `(p_beneficio_id, p_valor_conta, p_desconto, p_incremental, p_data, p_hora) → jsonb`.

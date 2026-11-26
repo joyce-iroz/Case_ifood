@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { NOMES_DIA, formatarMoeda } from "@/lib/dominio";
+import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
 import { SEGMENTOS, type Segmento } from "@/lib/segmentos";
 import type { Bloqueio, TipoBeneficio } from "@/lib/campanha";
 import type { ContextoJanela, ResultadoCriacao } from "@/lib/emissao";
@@ -66,6 +67,14 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
     if (enviando) return;
+    const valorNum = lerNumeroBR(valor);
+    const tetoNum = lerNumeroBR(teto);
+    if (!Number.isFinite(valorNum) || !Number.isFinite(tetoNum)) {
+      setResultado({
+        erro: `Não entendi ${!Number.isFinite(valorNum) ? `o valor "${valor}"` : `o teto "${teto}"`}. Use, por exemplo, 15 ou 2.400,00.`,
+      });
+      return;
+    }
     setEnviando(true);
     setResultado(null);
     try {
@@ -78,8 +87,8 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
           hora_fim: fim,
           segmento,
           tipo,
-          valor: Number(valor.replace(",", ".")),
-          teto: Number(teto.replace(",", ".")),
+          valor: valorNum,
+          teto: tetoNum,
         }),
       });
       const corpo = await r.json().catch(() => ({ erro: `Falha (${r.status})` }));
@@ -193,7 +202,13 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
           Valor{limite && ` · ${limite}`}
           <span className="entrada">
             {tipo === "valor_fixo" && <span>R$</span>}
-            <input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} required />
+            <input
+              inputMode="decimal"
+              value={valor}
+              onChange={(e) => setValor(e.target.value)}
+              onBlur={() => setValor((v) => reformatar(v, tipo === "percentual" ? [0, 2] : 2))}
+              required
+            />
             {tipo === "percentual" && <span>%</span>}
           </span>
         </label>
@@ -201,7 +216,13 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
           Teto de gasto
           <span className="entrada">
             <span>R$</span>
-            <input inputMode="decimal" value={teto} onChange={(e) => setTeto(e.target.value)} required />
+            <input
+              inputMode="decimal"
+              value={teto}
+              onChange={(e) => setTeto(e.target.value)}
+              onBlur={() => setTeto((v) => reformatar(v, 2))}
+              required
+            />
           </span>
         </label>
       </div>
@@ -213,6 +234,12 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
       {resultado && <Resultado r={resultado} />}
     </form>
   );
+}
+
+/** Ao sair do campo, mostra o número como foi entendido ("2400" → "2.400,00"); texto inválido fica como está. */
+function reformatar(texto: string, casas: number | [number, number]) {
+  const n = lerNumeroBR(texto);
+  return Number.isFinite(n) ? formatarNumeroBR(n, casas) : texto;
 }
 
 function Resultado({ r }: { r: ResultadoCriacao | { erro: string } }) {
@@ -248,4 +275,5 @@ const ROTULO_REGRA: Record<Bloqueio["regra"], string> = {
   ocupacao_min: "Ocupação mínima",
   teto_mes: "Teto do mês",
   dias_entre_ofertas: "Intervalo entre ofertas",
+  cardapio: "Cardápio do planejador",
 };

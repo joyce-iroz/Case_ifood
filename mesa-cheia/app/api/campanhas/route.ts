@@ -3,6 +3,7 @@ import { criarCampanha } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // emissão + até 2 chamadas ao modelo para o kit
 
 /**
  * Cria a campanha e emite os benefícios. O corpo é uma PropostaCampanha (lib/campanha.ts),

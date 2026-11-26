@@ -5,6 +5,7 @@ import { carregarRegras, expirarVencidos, lerCampanha, lerResgate } from "./dado
 import { RESTAURANTE_DEMO_ID, agoraNoFuso, formatarJanela, somarDias } from "./dominio";
 import { hashTelefone } from "./hash";
 import { normalizarTelefone } from "./telefone";
+import { lerCampoNumero } from "./numero";
 import {
   DEMO_ACEITA_ANTES_DA_JANELA,
   calcularDesconto,
@@ -23,6 +24,7 @@ export type RespostaConsulta =
       beneficio: string;          // "15% de desconto"
       validade: string;           // "ter 01/12, 18h–23h"
       antesDaJanela: boolean;     // só acontece em modo demo
+      script: string | null;      // kit de ativação: o que dizer ao cliente
       calculo: { tipo: TipoBeneficio; valor: number; descontoMax: number; tetoRestante: number };
     }
   | { tipo: "nenhum" }
@@ -87,7 +89,11 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
   if (ativos.length) {
     const b = ativos[0];
     const c = lerCampanha(b.campanhas);
-    const [regras, gasto] = await Promise.all([carregarRegras(id), gastoDaCampanha(c.id)]);
+    const [regras, gasto, kit] = await Promise.all([
+      carregarRegras(id),
+      gastoDaCampanha(c.id),
+      db.from("kits").select("script_garcom").eq("campanha_id", c.id).maybeSingle(),
+    ]);
     return {
       tipo: "ativo",
       beneficioId: b.id,
@@ -96,6 +102,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
       beneficio: textoBeneficio(c.tipo, c.valor),
       validade: formatarJanela(c.data_janela, c.hora_inicio, c.hora_fim),
       antesDaJanela: new Date(b.valido_de).getTime() > agora,
+      script: kit.error ? null : (kit.data?.script_garcom ?? null),
       calculo: { tipo: c.tipo, valor: c.valor, descontoMax: regras.desconto_max, tetoRestante: c.teto - gasto },
     };
   }
@@ -130,7 +137,7 @@ export type RespostaResgate =
  * se já houver resgate, devolve o mesmo em vez de criar outro.
  */
 export async function aplicarBeneficio(beneficioId: string, valorContaEntrada: unknown): Promise<RespostaResgate> {
-  const valorConta = Math.round(Number(valorContaEntrada) * 100) / 100;
+  const valorConta = Math.round(lerCampoNumero(valorContaEntrada) * 100) / 100;
   if (typeof beneficioId !== "string" || !/^[0-9a-f-]{36}$/i.test(beneficioId))
     throw new EntradaInvalidaError("Benefício inválido.");
   if (!Number.isFinite(valorConta) || valorConta <= 0 || valorConta > 100_000)
