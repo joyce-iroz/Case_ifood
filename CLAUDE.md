@@ -213,6 +213,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   abaixo de `ocupacao_min`; `teto` da campanha ≤ teto mensal restante;
   pelo menos um cliente elegível. `dias_entre_ofertas` tira do lote quem
   recebeu oferta recente; se tirar todos, bloqueia.
+- **Teto no painel**: o mini-indicador mostra o teto do mês da próxima janela, com o
+  nome do mês ("Teto de dezembro"); se for outro mês, mostra embaixo o que o mês
+  atual já gastou ("Novembro: R$ 272,32 gastos em 2 campanhas").
 - **Teto mensal comprometido** (`comprometidoNoMes`): no mês de `data_janela`,
   campanha com janela ainda aberta reserva o `teto` inteiro; campanha
   encerrada conta só o que gastou.
@@ -255,7 +258,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   livres". A projeção usa o mesmo valor de vaga (`cabeNoTeto`, `valorVaga`).
 - **Página da oferta** (`/oferta/[token]`, lib/oferta.ts): o que o cliente recebe
   pela mensagem. Token aleatório do benefício (`beneficios.token`, 32 hex), nunca o
-  telefone; sem nome nem dado do cliente; `noindex`. Estados: disponível (vagas
+  telefone; sem nome nem dado do cliente; `noindex`. É a simulação da tela do
+  cliente (no produto, a oferta chega no app em que ele pede comida ou por
+  WhatsApp); uma faixa no topo diz isso. Não faz parte do painel do restaurante. Estados: disponível (vagas
   livres + "Garantir minha mesa"), garantida, esgotada, usada, encerrada. Na demo, o
   painel "Telefones de teste" tem "ver a oferta que ele recebeu". A mensagem da
   equipe manda digitar o telefone quando o cliente senta (guarda a vaga) e de novo na
@@ -362,7 +367,8 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   campanha (o garçom lê em voz alta); e `conferirEspecifico`: nenhuma frase de
   `FRASES_GENERICAS` ("benefício da casa", "aproveite"...), a mensagem da equipe
   cita o dia e a hora de início, e nenhum marcador (`{nome}` incluído): o script não
-  diz o nome do cliente, porque na mesa pode haver quem não recebeu oferta
+  diz o nome do cliente, porque na mesa pode haver quem não recebeu oferta; não supõe
+  gênero ("senhor", "senhora") nem pede que o cliente digite ou registre nada
   (`publico.usar_nome` é sempre false). Só alguns clientes têm desconto, então nada
   pode soar como "para todos": o script não pede telefone (é lido depois que a tela
   confirmou o benefício) e tem uma marca pessoal ("sua conta tem", "você recebeu");

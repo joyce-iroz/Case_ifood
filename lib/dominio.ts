@@ -110,3 +110,7 @@ export function formatarValidade(datas: string[], inicio: number, fim: number): 
 export function formatarJanela(data: string, inicio: number, fim: number): string {
   return `${formatarDataCurta(data)}, ${formatarHora(inicio)}–${formatarHora(fim)}`;
 }
+
+const NOMES_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+/** "2026-12" → "dezembro" */
+export const nomeMes = (anoMes: string) => NOMES_MES[Number(anoMes.slice(5, 7)) - 1] ?? anoMes;

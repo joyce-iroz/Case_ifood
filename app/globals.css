@@ -780,3 +780,4 @@ code, .mono { font-family: var(--fonte-mono); }
 .oferta-rodape { text-align: center; }
 .link-oferta { font-size: 13px; color: var(--vermelho); text-decoration: none; margin-top: 4px; } .link-oferta:hover { text-decoration: underline; }
 .cartao-reserva { margin: 6px 0 0; font-size: 13px; color: var(--verde-suave); }
+.oferta-simulacao { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--borda-forte); color: var(--texto-suave); font-size: 12px; line-height: 1.4; }

@@ -23,6 +23,10 @@ export default async function PaginaOferta({ params }: { params: Promise<{ token
 
   return (
     <main className="oferta-pagina">
+      <p className="oferta-simulacao">
+        Simulação da tela do cliente. No produto, a oferta chega no app em que ele pede comida ou por WhatsApp; o
+        restaurante não vê esta tela.
+      </p>
       <Marca />
       <section className={`oferta-cartao oferta-${o.estado}`}>
         <span className="oferta-casa">{o.restaurante}</span>

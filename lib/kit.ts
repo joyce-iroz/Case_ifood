@@ -22,6 +22,7 @@ Se citar o benefício com número, use exatamente o de "beneficio"; não escreva
 
 O texto tem de ser desta campanha, não de uma qualquer:
 - "publico.quem" diz quem é o cliente que vai ouvir o script; "publico.abordagem" diz como falar com ele. O script parte dessa situação (primeira vez no salão, volta depois de meses, freguês daquele dia...).
+- Não suponha gênero ("senhor", "senhora") nem use apelido. Não peça que o cliente digite ou registre nada.
 - Não diga o nome do cliente no script: na mesa pode haver gente que não recebeu oferta. Fale em tom de conversa, só com quem deu o telefone. Não use marcadores como {nome}.
 - Não use frases de propaganda que serviriam para qualquer restaurante: ${FRASES_GENERICAS.map((f) => `"${f}"`).join(", ")}.
 - mensagem_equipe cita o dia ("dados.dia") e o horário de início ("dados.hora_inicio") escritos do mesmo jeito, e diz em poucas palavras quem recebeu a oferta.

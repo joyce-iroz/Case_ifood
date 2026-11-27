@@ -169,6 +169,10 @@ export function conferirEspecifico(kit: TextosKit, e: Pick<EntradaKit, "dia" | "
   for (const f of FRASES_PARA_TODOS)
     for (const [campo, texto] of Object.entries(kit))
       if (baixo(texto).includes(f)) erros.push(`${campo} usa "${f}", que soa como desconto para todos; só quem recebeu a oferta tem`);
+  for (const p of ["senhor", "senhora", "moço", "moça", "querida", "querido"])
+    if (new RegExp(`\\b${p}\\b`).test(script)) erros.push(`script_garcom diz "${p}": não suponha gênero nem trate por apelido`);
+  if (/\bdigit/.test(script) || script.includes("registrar"))
+    erros.push("script_garcom não pede que o cliente digite ou registre nada: quem digita é o atendente, antes de ler o script");
   if (!MARCAS_PESSOAIS.some((m) => script.includes(m)))
     erros.push(`script_garcom precisa deixar claro que o desconto é deste cliente (ex.: "sua conta tem", "você recebeu")`);
   for (const campo of ["cartaz_titulo", "cartaz_linha"] as const)

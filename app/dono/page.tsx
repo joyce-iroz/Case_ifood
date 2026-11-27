@@ -12,7 +12,7 @@ import { Tentativas } from "@/components/Tentativas";
 import { Info } from "@/components/Info";
 import { listarPlanejamentos, type PlanejamentoView } from "@/lib/planejador";
 import { carregarRegras, carregarRestaurante, obterResumoOcupacao } from "@/lib/dados";
-import { NOMES_DIA, formatarDataCurta, formatarHora, formatarMoeda, horaDoTime, horasDeFuncionamento, type Restaurante } from "@/lib/dominio";
+import { hojeNoFuso, nomeMes, NOMES_DIA, formatarDataCurta, formatarHora, formatarMoeda, horaDoTime, horasDeFuncionamento, type Restaurante } from "@/lib/dominio";
 import type { Regras } from "@/lib/campanha";
 import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
@@ -233,6 +233,10 @@ function Destaque({
   const meta = Math.max(1, Math.round(fracas * META_RECUPERACAO));
   const progresso = Math.min(100, (recuperadas / meta) * 100);
   const entregues = painel.filter((c) => c.kit?.entregue_em).length;
+  // O teto mostrado é o do mês da próxima janela; o mês de hoje pode já ter gasto.
+  const mesAtual = hojeNoFuso().slice(0, 7);
+  const doMes = painel.filter((c) => c.campanha.data_janela.startsWith(mesAtual));
+  const gastoMesAtual = { valor: doMes.reduce((s, c) => s + c.resultado.custoDescontos, 0), n: doMes.length };
   const reais = (v: number) => formatarMoeda(v).replace(/,00$/, "");
   return (
     <>
@@ -290,14 +294,23 @@ function Destaque({
           </div>
         )}
         <div className="mini-kpi">
-          <span>Teto de descontos · {ctx.mes.split("-").reverse().join("/")}</span>
+          <span>
+            Teto de {nomeMes(ctx.mes)}{" "}
+            <Info texto="O teto é por mês. Conta o mês em que a campanha acontece: a próxima janela pode cair no mês que vem." />
+          </span>
           <b>{reais(restante)}</b>
           <div className="kpi-barra" aria-hidden="true">
             <span style={{ width: `${usado}%` }} />
           </div>
           <small>
-            restantes de {reais(regras.teto_mes)} · <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
+            livres de {reais(regras.teto_mes)} · <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
           </small>
+          {mesAtual !== ctx.mes && gastoMesAtual.n > 0 && (
+            <small>
+              {nomeMes(mesAtual).replace(/^./, (c) => c.toUpperCase())}: {formatarMoeda(gastoMesAtual.valor)} gastos em{" "}
+              {gastoMesAtual.n} {gastoMesAtual.n === 1 ? "campanha" : "campanhas"}
+            </small>
+          )}
         </div>
         <div className="mini-kpi">
           <span>Resgates</span>
