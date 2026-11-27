@@ -1,0 +1,54 @@
+// Resultado por campanha. Aritmética sobre resgates gravados. Puro.
+
+export type LinhaResultado = {
+  emitidos: number;
+  resgatados: number;
+  taxaResgate: number | null;        // % dos emitidos
+  somaContas: number;                // soma de valor_conta (antes do desconto)
+  receitaIncremental: number;        // soma de (valor_conta − desconto) dos resgates incrementais
+  resgatesIncrementais: number;
+  custoDescontos: number;            // soma de desconto de todos os resgates
+  custoPorIncremental: number | null; // custoDescontos / resgatesIncrementais
+  resgatesCanibalizados: number;      // resgates com incremental = false: o cliente já vinha nessa janela
+  custoCanibalizado: number;          // soma dos descontos desses resgates
+  percentualIncremental: number | null; // resgatesIncrementais / resgatados, em %
+};
+
+/** Canibalizado acima desta fração do custo total recebe tom de alerta no painel. */
+export const ALERTA_CANIBALIZADO = 0.4;
+export const canibalizadoEmAlerta = (r: Pick<LinhaResultado, "custoCanibalizado" | "custoDescontos">) =>
+  r.custoDescontos > 0 && r.custoCanibalizado > ALERTA_CANIBALIZADO * r.custoDescontos;
+
+export function resumirCampanha(
+  beneficios: { status: string }[],
+  resgates: { valor_conta: number; desconto: number; incremental: boolean }[],
+): LinhaResultado {
+  const soma = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100;
+  const inc = resgates.filter((r) => r.incremental);
+  const can = resgates.filter((r) => !r.incremental);
+  const custo = soma(resgates.map((r) => r.desconto));
+  return {
+    emitidos: beneficios.length,
+    resgatados: resgates.length,
+    taxaResgate: beneficios.length ? Math.round((resgates.length / beneficios.length) * 1000) / 10 : null,
+    somaContas: soma(resgates.map((r) => r.valor_conta)),
+    receitaIncremental: soma(inc.map((r) => r.valor_conta - r.desconto)),
+    resgatesIncrementais: inc.length,
+    custoDescontos: custo,
+    custoPorIncremental: inc.length ? Math.round((custo / inc.length) * 100) / 100 : null,
+    resgatesCanibalizados: can.length,
+    custoCanibalizado: soma(can.map((r) => r.desconto)),
+    percentualIncremental: resgates.length ? Math.round((inc.length / resgates.length) * 1000) / 10 : null,
+  };
+}
+
+/** Premissa das cadeiras recuperadas: cada mesa fica 1h30 em média. */
+export const PERMANENCIA_H = 1.5;
+
+/**
+ * Cadeiras-hora recuperadas: pessoas trazidas por resgates incrementais × permanência.
+ * Mesma unidade das cadeiras-hora vazias da grade, para comparar uma com a outra.
+ */
+export function cadeirasRecuperadas(resgates: { incremental: boolean; pessoas: number }[]): number {
+  return Math.round(resgates.filter((r) => r.incremental).reduce((a, r) => a + r.pessoas, 0) * PERMANENCIA_H);
+}
