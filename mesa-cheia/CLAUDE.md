@@ -385,7 +385,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   confirmou o benefício) e tem uma marca pessoal ("sua conta tem", "você recebeu");
   `FRASES_PARA_TODOS` ("automaticamente", "todo mundo"...) reprova; o cartaz, que
   todas as mesas leem, não cita valor e fala com quem "recebeu" a mensagem; a
-  mensagem da equipe diz que só quem recebeu tem desconto. A entrada leva
+  mensagem da equipe diz que só quem recebeu tem desconto. Reserva: a mensagem da
+  equipe diz que as vagas são limitadas, que quem confirmou já tem a mesa garantida e
+  que o telefone é digitado quando o cliente senta (guarda a vaga); o cartaz ensina a
+  garantir a mesa pela mensagem e dizer o telefone ao sentar ("garant"/"confirm"). A entrada leva
   `publico` (`publicoDoSegmento`: quem é o cliente e como falar com ele), montada
   por `entradaKit`. Kits antigos com `{nome}` ainda são trocados pelo primeiro nome
   (`aplicarNome`, no servidor). Para `nenhum` e `resgatado`, o salão mostra uma

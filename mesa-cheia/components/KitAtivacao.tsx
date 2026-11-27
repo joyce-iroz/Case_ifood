@@ -166,9 +166,9 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
               {(
                 [
                   ["script_garcom", "Script do garçom", "Lido só para quem tem desconto, depois que a tela confirmar.", 3],
-                  ["mensagem_equipe", "Mensagem para a equipe", "Vai para o grupo da equipe.", 4],
+                  ["mensagem_equipe", "Mensagem para a equipe", "Vai para o grupo da equipe. Diga que as vagas são limitadas e que o telefone é digitado quando o cliente senta.", 4],
                   ["cartaz_titulo", "Título do cartaz", "Até 6 palavras. Todas as mesas leem.", 1],
-                  ["cartaz_linha", "Linha do cartaz", "Como usar: falar com quem recebeu a mensagem.", 2],
+                  ["cartaz_linha", "Linha do cartaz", "Como usar: garantir a mesa pela mensagem e dizer o telefone ao sentar.", 2],
                 ] as const
               ).map(([campo, rotulo, ajuda, linhas]) => (
                 <label key={campo} className="campo">

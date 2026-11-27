@@ -35,9 +35,9 @@ O texto tem de ser desta campanha, não de uma qualquer:
 
 Responda só com um objeto JSON, sem texto fora dele, com exatamente estas chaves:
 - script_garcom: o que o atendente fala depois que a tela mostrou que ESTE cliente tem o benefício. O telefone JÁ FOI digitado pelo atendente: o script nunca fala em telefone. Palavras proibidas no script: telefone, digite, registrar, cadastro, senhor, senhora, automaticamente, todos. Use "exemplo_de_script" como modelo de tom e tamanho e escreva uma variação sua. No máximo 45 palavras, tom falado, sem jargão de marketing.
-- mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício, quem recebeu) e do que fazer: quando o cliente sentar, digitar o telefone dele na tela do salão (isso guarda a vaga do desconto); no fechamento, digitar de novo e, se aparecer benefício, ler a frase da tela e aplicar. Tom de recado interno.
+- mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício, quem recebeu) e do que fazer. As vagas são limitadas: quem confirmou pela mensagem já tem a mesa garantida; quando o cliente sentar, digitar o telefone dele na tela do salão (isso guarda a vaga de quem não confirmou, se ainda houver); no fechamento, digitar de novo e, se aparecer benefício, ler a frase da tela e aplicar. Tom de recado interno.
 - cartaz_titulo: chamada curta para cartaz de mesa, no máximo 6 palavras.
-- cartaz_linha: uma linha explicando como o cliente usa: informar o telefone ao garçom no fechamento da conta.
+- cartaz_linha: uma linha explicando como o cliente usa: garantir a mesa pela mensagem que recebeu e dizer o telefone ao garçom quando sentar.
 Se a entrada tiver "erros_da_tentativa_anterior", corrija exatamente esses pontos.`;
 
 const TENTATIVAS_KIT = 2; // uma tentativa e mais uma

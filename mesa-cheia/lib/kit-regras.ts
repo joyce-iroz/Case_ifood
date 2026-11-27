@@ -181,6 +181,13 @@ export function conferirEspecifico(kit: TextosKit, e: Pick<EntradaKit, "dia" | "
     erros.push(`cartaz precisa falar com quem recebeu a mensagem (ex.: "se você recebeu nossa mensagem")`);
   const equipe = baixo(kit.mensagem_equipe);
   if (!equipe.includes("receb")) erros.push(`mensagem_equipe precisa dizer que só quem recebeu a oferta tem desconto`);
+  // Vagas: a equipe digita o telefone quando o cliente senta (guarda a vaga); o cartaz
+  // ensina a garantir a mesa pela mensagem antes de sair de casa.
+  if (!/sent|cheg/.test(equipe) || !equipe.includes("vaga"))
+    erros.push(`mensagem_equipe precisa dizer que as vagas são limitadas e que o telefone é digitado quando o cliente senta (isso guarda a vaga)`);
+  const cartaz = baixo(`${kit.cartaz_titulo} ${kit.cartaz_linha}`);
+  if (!/garant|confirm/.test(cartaz))
+    erros.push(`cartaz precisa dizer que dá para garantir a mesa pela mensagem`);
   if (!equipe.includes(e.dia)) erros.push(`mensagem_equipe precisa citar o dia (${e.dia})`);
   if (!equipe.includes(baixo(e.hora_inicio))) erros.push(`mensagem_equipe precisa citar o horário de início (${e.hora_inicio})`);
   return erros;
@@ -226,27 +233,27 @@ export function kitTemplate(e: EntradaKit): TextosKit {
     frequenta_janela: {
       script: `Você é de vir na ${e.dia}, né? Por isso hoje sua conta tem ${b}. Posso aplicar?`,
       titulo: `Cliente de ${e.dia}?`,
-      linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
+      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
     },
     frequenta_outras: {
       script: `Que bom te ver aqui ${num} ${e.dia}. Por ter vindo nesse horário, sua conta tem ${b}. Posso aplicar?`,
       titulo: `Veio ${num} ${e.dia}?`,
-      linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
+      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
     },
     delivery_nunca_veio: {
       script: `Você já conhecia nossa comida pelo delivery, né? Para a primeira vez no salão, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Primeira vez no salão?",
-      linha: "Se você pede nosso delivery e recebeu a mensagem, diga seu telefone ao garçom na conta.",
+      linha: "Pede nosso delivery e recebeu a mensagem? Garanta sua mesa por ela e diga seu telefone ao sentar.",
     },
     sumiu_60_dias: {
       script: `Que bom te ver de volta. Para marcar a volta, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Que bom te ver de volta",
-      linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
+      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
     },
     cozinha_similar: {
       script: `Primeira vez aqui na casa? Seja bem-vindo. Para essa primeira visita, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Primeira vez aqui?",
-      linha: "Se você recebeu nosso convite, diga seu telefone ao garçom na hora da conta.",
+      linha: "Recebeu nosso convite? Garanta sua mesa por ele e diga seu telefone ao garçom quando sentar.",
     },
   };
   const t = porPublico[e.publico.segmento];
@@ -254,7 +261,8 @@ export function kitTemplate(e: EntradaKit): TextosKit {
     script_garcom: t.script,
     mensagem_equipe:
       `Pessoal, campanha ${e.janela}: ${b} para quem recebeu a oferta (${e.publico.quem}). ` +
-      `Começa ${e.dia} às ${e.hora_inicio}. Quando o cliente sentar, digitem o telefone na tela do salão: isso guarda a vaga dele. ` +
+      `Começa ${e.dia} às ${e.hora_inicio}. As vagas são limitadas: quem confirmou pela mensagem já tem a mesa garantida. ` +
+      `Quando o cliente sentar, digitem o telefone na tela do salão: isso guarda a vaga de quem não confirmou, se ainda houver. ` +
       `No fechamento, digitem de novo. ` +
       `Se aparecer benefício, leiam a frase da tela em tom de conversa, só para quem deu o telefone, e toquem em Aplicar. ` +
       `Se não aparecer, leiam a frase que a tela mostra para esse caso: ninguém sai achando que foi esquecido.`,

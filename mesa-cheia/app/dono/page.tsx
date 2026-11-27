@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
-const VERSAO = "27/11 · teto com gasto e reservado";
+const VERSAO = "27/11 · kit fala da reserva";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
