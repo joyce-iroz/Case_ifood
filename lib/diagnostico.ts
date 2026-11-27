@@ -55,3 +55,24 @@ export function diagnosticar(e: EntradaDiagnostico): ResultadoDiagnostico {
     receitaMes: Math.round((recuperavelMes / PERMANENCIA_H) * e.ticketMedio),
   };
 }
+
+/** Turnos que a página pergunta. */
+export const TURNOS_DIAGNOSTICO = [
+  { nome: "Almoço", inicio: 11, fim: 15 },
+  { nome: "Jantar", inicio: 18, fim: 23 },
+];
+
+/**
+ * O exemplo que a página abre preenchido. A seção "Como funciona a simulação" usa o
+ * mesmo, para os números do exemplo baterem com o resultado logo abaixo.
+ */
+export const EXEMPLO_DIAGNOSTICO: EntradaDiagnostico = {
+  capacidade: 64,
+  ticketMedio: 78,
+  turnos: TURNOS_DIAGNOSTICO,
+  dias: [2, 3, 4, 5, 6, 0],
+  niveis: {
+    "2-0": "vazio", "2-1": "vazio", "3-0": "medio", "3-1": "vazio", "4-0": "medio", "4-1": "medio",
+    "5-0": "medio", "5-1": "cheio", "6-0": "cheio", "6-1": "cheio", "0-0": "cheio", "0-1": "medio",
+  },
+};

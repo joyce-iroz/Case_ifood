@@ -1,4 +1,7 @@
 import Link from "next/link";
+
+/** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
+const VERSAO = "27/11 · vagas, limite por conta, kit editável";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
@@ -194,6 +197,10 @@ export default async function Dono({ searchParams }: { searchParams: Promise<Bus
           <>
             {painel && <TelefonesTeste telefones={painel.telefonesTeste} jaResgataram={painel.jaResgataram} />}
             {planejamentos.length > 0 && <RegistroPlanejador planos={planejamentos} />}
+            <p className="legenda versao">
+              Versão do app: {VERSAO}
+              {process.env.VERCEL_GIT_COMMIT_SHA ? ` · ${process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)}` : ""}
+            </p>
           </>
         )}
       </main>

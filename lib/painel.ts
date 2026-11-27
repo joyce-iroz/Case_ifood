@@ -4,7 +4,7 @@ import { valorDaVaga, vagasDoTeto } from "./projecao";
 import { RESTAURANTE_DEMO_ID, hojeNoFuso, somarDias } from "./dominio";
 import { verificarPausas } from "./pausa";
 import { medirControle, type MedidaControle } from "./controle";
-import { carregarKits, type Kit } from "./kit";
+import { carregarKits, kitAtual, type Kit } from "./kit";
 import { fimDaCampanha, janelaDa } from "./campanha";
 import { segmentoAnonimo, visitouNaJanela } from "./segmentos";
 import { cadeirasRecuperadas, resumirCampanha, type LinhaResultado } from "./resultados";
@@ -81,7 +81,7 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     return {
       campanha: c,
       vagas: { valor: vaga, total, usadas: rs.length, garantidas, livres: c.status === "ativa" ? livres : 0 },
-      kit: kits.get(c.id) ?? null,
+      kit: kits.has(c.id) ? kitAtual(kits.get(c.id)!, c, restaurante) : null,
       ativa: c.status === "ativa" && new Date(fimDaCampanha(c)).getTime() > agoraMs,
       controle: medirControle(
         c,

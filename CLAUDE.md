@@ -235,7 +235,7 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   da conta e o que a mesa pode levar do teto (`limitadoPor: "limite"`).
   `textoBeneficio(tipo, valor, limite)` escreve o limite. O planejador escolhe de
   `LIMITES_POR_CONTA` (lista fechada; `limites_por_conta` no cardápio; cardápio
-  antigo: só null); a regra fixa usa o menor limite que cobre o dobro do desconto numa
+  antigo, sem a chave, usa a mesma lista fixa); a regra fixa usa o menor limite que cobre o dobro do desconto numa
   conta média. O kit pode citar "R$ limite" além do %.
 - **Vagas do teto** (lib/vagas.ts, `valorDaVaga`, `vagasDoTeto`). Cada vaga separa do
   teto o desconto máximo de uma mesa: valor fixo = o valor; % com limite = o limite;
@@ -361,7 +361,11 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   juntos. O texto do modelo vem de `POST /api/kits/[id]/escrever`
   (`escreverKitComModelo`), disparado pelo botão "Escrever com IA" no kit; se
   passar na validação, substitui o texto atual, senão o atual fica e a tela mostra
-  o motivo. Nunca no carregamento de página. Validação (`validarKit`): 4 campos de texto não
+  o motivo. Nunca no carregamento de página. O dono também edita os quatro textos no
+  painel ("Editar", `PATCH /api/kits/[id]`, `salvarKitEditado`): mesmas regras, erros
+  com o nome dos campos da tela; grava com `modelo = "dono"`. Na exibição (painel e
+  salão), `kitAtual` revalida o texto gravado: se fere as regras atuais (kit de
+  antes de uma regra nova), mostra o texto fixo do público e avisa; texto do dono fica. Validação (`validarKit`): 4 campos de texto não
   vazios, `script_garcom` ≤ 45 palavras, `cartaz_titulo` ≤ 6 palavras, e
   `conferirNumeros`: todo "N%" ou "R$ N" escrito tem de ser o benefício da
   campanha (o garçom lê em voz alta); e `conferirEspecifico`: nenhuma frase de
@@ -436,7 +440,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   cadeiras-hora vazias. O salão pergunta quantas pessoas estão na mesa (padrão 2).
 - **Diagnóstico de captação** (`/diagnostico`): abre com a promessa "Você só
   paga pelo cliente que nunca veio" (cobrança por cliente novo, medido contra o
-  controle). Depois, o dono marca cada turno como
+  controle). Logo abaixo, "Como funciona a simulação": três passos (tamanho da casa,
+  marcar turnos, ver quanto fica na mesa) com o exemplo `EXEMPLO_DIAGNOSTICO`, o
+  mesmo que o formulário abre preenchido, para os números baterem com o resultado; e
+  o aviso de que é estimativa. Depois, o dono marca cada turno como
   cheio (90%), médio (60%) ou vazio (35%); a conta (`diagnosticar`) dá
   cadeiras-hora vazias por mês e quanto 5% de recuperação dos turnos vazios
   renderia. O interesse vai para `leads`, com o resultado recalculado no servidor.
@@ -463,6 +470,8 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   ("público", não "segmento"; "clientes novos", não "incrementais"; "para quem já
   vinha", não "canibalizado"). Como a conta foi feita vai no ícone `Info`, não em
   parágrafo. O modelo e as premissas ficam na aba Demo e no CLAUDE.md.
+- **Versão no ar**: a aba Demo mostra `VERSAO` (constante em app/dono/page.tsx, troque a
+  cada entrega) e o commit da Vercel, para saber se o deploy pegou.
 - Identificadores de domínio em português, sem acento no código
   (`ocupacao`, `beneficio`); texto de interface em português com acento.
 - Schema mudou? Atualize `supabase/schema.sql` (ele derruba e recria tudo) e a

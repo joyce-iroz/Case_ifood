@@ -52,6 +52,34 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
     }
   }
 
+  // Edição pelo dono: os quatro textos de uma vez; o servidor confere as mesmas regras.
+  const [editando, setEditando] = useState<null | Record<"script_garcom" | "mensagem_equipe" | "cartaz_titulo" | "cartaz_linha", string>>(null);
+  const [errosEdicao, setErrosEdicao] = useState<string[]>([]);
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvarEdicao() {
+    if (!item || !editando || salvando) return;
+    setSalvando(true);
+    setErrosEdicao([]);
+    try {
+      const r = await fetch(`/api/kits/${item.campanhaId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(editando),
+      });
+      const j = (await r.json()) as { ok: boolean; erros?: string[] };
+      if (!j.ok) setErrosEdicao(j.erros ?? ["Não deu para salvar."]);
+      else {
+        setEditando(null);
+        router.refresh();
+      }
+    } catch {
+      setErrosEdicao(["Sem conexão. Tente de novo."]);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   async function copiarAba(qual: Aba) {
     if (!kit) return;
     const texto =
@@ -93,10 +121,29 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
             <span className="legenda">
               {item.rotulo} · {item.beneficio}
             </span>
-            {kit.modelo ? (
-              <span className="selo">texto do modelo · {kit.modelo}</span>
+            {kit.modelo === "dono" ? (
+              <span className="selo">texto editado por você</span>
+            ) : kit.modelo ? (
+              <span className="selo">texto da IA</span>
             ) : (
               <span className="selo selo-demo">texto fixo deste público</span>
+            )}
+            {!editando && (
+              <button
+                type="button"
+                className="botao"
+                onClick={() => {
+                  setErrosEdicao([]);
+                  setEditando({
+                    script_garcom: mostrarMarcador(kit.script_garcom).replace("[nome do cliente], ", ""),
+                    mensagem_equipe: kit.mensagem_equipe,
+                    cartaz_titulo: kit.cartaz_titulo,
+                    cartaz_linha: kit.cartaz_linha,
+                  });
+                }}
+              >
+                Editar
+              </button>
             )}
             <button type="button" className="botao botao-ia" onClick={escreverComModelo} disabled={escrevendo}>
               {escrevendo ? "Escrevendo…" : kit.modelo ? "Reescrever com IA" : "Escrever com IA"}
@@ -107,8 +154,52 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
           </div>
 
           {falhaModelo && <p className="aviso kit-falha">{falhaModelo}</p>}
+          {kit.substituido && (
+            <p className="legenda kit-falha">
+              O texto anterior não seguia as regras (pedia telefone ou soava como desconto para todos). Mostrando o texto fixo
+              deste público.
+            </p>
+          )}
 
-          <div className="kit-abas" role="tablist" aria-label="Peças do kit">
+          {editando && (
+            <div className="kit-edicao">
+              {(
+                [
+                  ["script_garcom", "Script do garçom", "Lido só para quem tem desconto, depois que a tela confirmar.", 3],
+                  ["mensagem_equipe", "Mensagem para a equipe", "Vai para o grupo da equipe.", 4],
+                  ["cartaz_titulo", "Título do cartaz", "Até 6 palavras. Todas as mesas leem.", 1],
+                  ["cartaz_linha", "Linha do cartaz", "Como usar: falar com quem recebeu a mensagem.", 2],
+                ] as const
+              ).map(([campo, rotulo, ajuda, linhas]) => (
+                <label key={campo} className="campo">
+                  {rotulo}
+                  <textarea
+                    rows={linhas}
+                    value={editando[campo]}
+                    onChange={(e) => setEditando({ ...editando, [campo]: e.target.value })}
+                  />
+                  <small className="legenda">{ajuda}</small>
+                </label>
+              ))}
+              {errosEdicao.length > 0 && (
+                <ul className="aviso kit-erros">
+                  {errosEdicao.map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="kit-acoes">
+                <button type="button" className="botao primario" onClick={salvarEdicao} disabled={salvando}>
+                  {salvando ? "Salvando…" : "Salvar"}
+                </button>
+                <button type="button" className="botao" onClick={() => setEditando(null)} disabled={salvando}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="kit-abas" role="tablist" aria-label="Peças do kit" hidden={!!editando}>
             {ABAS.map((a) => (
               <button
                 key={a.id}
@@ -124,7 +215,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
             ))}
           </div>
 
-          <div className="kit-painel" role="tabpanel" id={`painel-${aba}`} aria-labelledby={`aba-${aba}`}>
+          <div className="kit-painel" hidden={!!editando} role="tabpanel" id={`painel-${aba}`} aria-labelledby={`aba-${aba}`}>
             {aba === "script" && (
               <>
                 <blockquote className="kit-script">{mostrarMarcador(kit.script_garcom)}</blockquote>

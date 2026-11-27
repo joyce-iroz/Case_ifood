@@ -10,6 +10,8 @@ import {
   PERMANENCIA_H,
   SEMANAS_MES,
   diagnosticar,
+  EXEMPLO_DIAGNOSTICO,
+  TURNOS_DIAGNOSTICO,
   type EntradaDiagnostico,
   type Nivel,
 } from "@/lib/diagnostico";
@@ -17,20 +19,14 @@ import {
 const fmt = new Intl.NumberFormat("pt-BR");
 const ROTULO: Record<Nivel, string> = { cheio: "cheio", medio: "médio", vazio: "vazio" };
 const PROXIMO: Record<Nivel, Nivel> = { medio: "vazio", vazio: "cheio", cheio: "medio" };
-const TURNOS = [
-  { nome: "Almoço", inicio: 11, fim: 15 },
-  { nome: "Jantar", inicio: 18, fim: 23 },
-];
+const TURNOS = TURNOS_DIAGNOSTICO;
 const TODOS_DIAS = ordenarDiasSemana([0, 1, 2, 3, 4, 5, 6]);
 
 export function Diagnostico() {
-  const [capacidade, setCapacidade] = useState("64");
-  const [ticket, setTicket] = useState("78");
-  const [dias, setDias] = useState<number[]>([2, 3, 4, 5, 6, 0]);
-  const [niveis, setNiveis] = useState<Record<string, Nivel>>({
-    "2-0": "vazio", "2-1": "vazio", "3-0": "medio", "3-1": "vazio", "4-0": "medio", "4-1": "medio",
-    "5-0": "medio", "5-1": "cheio", "6-0": "cheio", "6-1": "cheio", "0-0": "cheio", "0-1": "medio",
-  });
+  const [capacidade, setCapacidade] = useState(String(EXEMPLO_DIAGNOSTICO.capacidade));
+  const [ticket, setTicket] = useState(String(EXEMPLO_DIAGNOSTICO.ticketMedio));
+  const [dias, setDias] = useState<number[]>(EXEMPLO_DIAGNOSTICO.dias);
+  const [niveis, setNiveis] = useState<Record<string, Nivel>>(EXEMPLO_DIAGNOSTICO.niveis);
   const [nome, setNome] = useState("");
   const [contato, setContato] = useState("");
   const [envio, setEnvio] = useState<{ ok: boolean; texto: string } | null>(null);

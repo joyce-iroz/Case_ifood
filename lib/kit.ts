@@ -9,7 +9,7 @@ import "server-only";
 // antes de copiar.
 import { supabaseServidor } from "./supabase/server";
 import { gerarJson, LimiteError, modeloConfigurado, SemChaveError } from "./llm";
-import { COLUNAS_CAMPANHA, carregarRestaurante, lerCampanha } from "./dados";
+import { COLUNAS_CAMPANHA, carregarRestaurante, lerCampanha, type CampanhaRegistro } from "./dados";
 import { textoBeneficio } from "./campanha";
 import { FRASES_GENERICAS, entradaKit, kitTemplate, validarKit, type EntradaKit, type TextosKit } from "./kit-regras";
 
@@ -109,7 +109,76 @@ export async function escreverKitComModelo(campanhaId: string): Promise<Resultad
   return { ok: false, erro: `${ultimoErro.replace(/\.?\s*$/, ".")} O texto atual do kit continua valendo.` };
 }
 
-export type Kit = TextosKit & { campanha_id: string; modelo: string | null; criado_em: string; entregue_em: string | null };
+export type Kit = TextosKit & {
+  campanha_id: string;
+  modelo: string | null; // id do modelo, "dono" (editado no painel) ou null (texto fixo)
+  criado_em: string;
+  entregue_em: string | null;
+  substituido?: boolean; // o texto gravado feria as regras atuais e foi trocado pelo fixo, só na exibição
+};
+
+export const MODELO_DONO = "dono";
+
+type CampanhaKit = Pick<CampanhaRegistro, "dia_semana" | "hora_inicio" | "hora_fim" | "semanas" | "segmento" | "tipo" | "valor" | "limite_por_conta">;
+type RestauranteKit = { nome: string; cozinha: string; ticket_medio: number };
+
+const entradaDa = (c: CampanhaKit, r: RestauranteKit) =>
+  entradaKit({ nome: r.nome, cozinha: r.cozinha, ticket_medio: r.ticket_medio }, c, textoBeneficio(c.tipo, c.valor, c.limite_por_conta));
+
+/**
+ * O kit como deve aparecer hoje. Texto gravado antes das regras atuais (ex.: um script
+ * que pede telefone ou diz "senhor") é trocado pelo texto fixo do público na exibição,
+ * no painel e no salão. Texto editado pelo dono passou nas regras ao salvar e fica.
+ */
+export function kitAtual(kit: Kit, c: CampanhaKit, r: RestauranteKit): Kit {
+  if (kit.modelo === MODELO_DONO) return kit;
+  const entrada = entradaDa(c, r);
+  const textos = { script_garcom: kit.script_garcom, mensagem_equipe: kit.mensagem_equipe, cartaz_titulo: kit.cartaz_titulo, cartaz_linha: kit.cartaz_linha };
+  const v = validarKit(JSON.stringify(textos), { tipo: c.tipo, valor: c.valor, limite: c.limite_por_conta }, entrada);
+  if (v.ok) return kit;
+  return { ...kit, ...kitTemplate(entrada), modelo: null, substituido: true };
+}
+
+/** As mensagens da validação falam com o modelo; para o dono, os campos têm o nome da tela. */
+const NOMES_CAMPO: Record<string, string> = {
+  script_garcom: "O script do garçom",
+  mensagem_equipe: "A mensagem para a equipe",
+  cartaz_titulo: "O título do cartaz",
+  cartaz_linha: "A linha do cartaz",
+};
+const paraODono = (erro: string) =>
+  erro
+    .replace(/^(script_garcom|mensagem_equipe|cartaz_titulo|cartaz_linha)\b/, (c) => NOMES_CAMPO[c])
+    .replace(/\b(script_garcom|mensagem_equipe|cartaz_titulo|cartaz_linha)\b/g, (c) => NOMES_CAMPO[c].toLowerCase());
+
+/**
+ * O dono editou o kit no painel. Passa pelas mesmas regras do texto da IA (números do
+ * benefício, nada de "para todos", script sem pedir telefone); se passar, grava.
+ */
+export async function salvarKitEditado(
+  campanhaId: string,
+  entrada: unknown,
+): Promise<{ ok: true } | { ok: false; erros: string[] }> {
+  const o = (entrada ?? {}) as Record<string, unknown>;
+  const campos = ["script_garcom", "mensagem_equipe", "cartaz_titulo", "cartaz_linha"] as const;
+  const textos = Object.fromEntries(campos.map((k) => [k, typeof o[k] === "string" ? (o[k] as string).trim() : ""])) as TextosKit;
+  const db = supabaseServidor();
+  const { data, error } = await db.from("campanhas").select(COLUNAS_CAMPANHA).eq("id", campanhaId).maybeSingle();
+  if (error) throw error;
+  if (!data) return { ok: false, erros: ["Campanha não encontrada."] };
+  const c = lerCampanha(data);
+  const r = await carregarRestaurante();
+  const v = validarKit(JSON.stringify(textos), { tipo: c.tipo, valor: c.valor, limite: c.limite_por_conta }, entradaDa(c, r));
+  if (!v.ok) return { ok: false, erros: v.erros.map(paraODono) };
+  const linha = { ...v.kit, modelo: MODELO_DONO, criado_em: new Date().toISOString() };
+  const up = await db.from("kits").update(linha).eq("campanha_id", campanhaId).select("campanha_id");
+  if (up.error) throw up.error;
+  if (!up.data?.length) {
+    const ins = await db.from("kits").insert({ campanha_id: campanhaId, ...linha });
+    if (ins.error) throw ins.error;
+  }
+  return { ok: true };
+}
 
 export async function carregarKits(campanhaIds: string[]): Promise<Map<string, Kit>> {
   if (!campanhaIds.length) return new Map();

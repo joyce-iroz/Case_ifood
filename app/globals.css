@@ -781,3 +781,29 @@ code, .mono { font-family: var(--fonte-mono); }
 .link-oferta { font-size: 13px; color: var(--vermelho); text-decoration: none; margin-top: 4px; } .link-oferta:hover { text-decoration: underline; }
 .cartao-reserva { margin: 6px 0 0; font-size: 13px; color: var(--verde-suave); }
 .oferta-simulacao { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--borda-forte); color: var(--texto-suave); font-size: 12px; line-height: 1.4; }
+
+/* diagnóstico: como funciona a simulação */
+.como-funciona { display: flex; flex-direction: column; gap: 22px; margin-bottom: 40px; }
+.como-cabeca { display: flex; flex-direction: column; gap: 8px; }
+.como-selo { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--vermelho); }
+.como-cabeca h2 { margin: 0; font-family: var(--fonte-titulo); font-size: clamp(26px, 3.4vw, 34px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.como-cabeca p { margin: 0; color: var(--texto-2); font-size: 16px; max-width: 680px; line-height: 1.5; }
+.como-passos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.como-passos li { display: flex; flex-direction: column; gap: 10px; padding: 22px; border-radius: 14px; background: var(--superficie); border: 1px solid var(--borda); }
+.como-num { width: 36px; height: 36px; border-radius: 999px; background: var(--vermelho-cheio); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--fonte-titulo); font-weight: 700; font-size: 17px; }
+.como-passos b { font-family: var(--fonte-titulo); font-size: 19px; font-weight: 600; }
+.como-passos p { margin: 0; font-size: 14px; color: var(--texto-suave); line-height: 1.5; }
+.como-fichas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.como-fichas span { padding: 8px 12px; border-radius: 10px; background: var(--rebaixo); border: 1px solid var(--borda-forte); font-size: 14px; }
+.como-fichas .ficha-vazio { background: var(--vermelho-cheio); border-color: var(--vermelho-cheio); color: #fff; font-weight: 600; font-size: 13px; }
+.como-fichas .ficha-medio { background: var(--superficie-2); color: var(--texto-2); font-size: 13px; }
+.como-fichas .ficha-cheio { background: var(--borda-forte); border-color: var(--borda-forte); color: var(--texto); font-size: 13px; }
+.como-fichas .ficha-ganho { background: var(--verde-fundo); border-color: var(--verde-borda); color: var(--verde-texto); font-weight: 600; }
+.como-aviso { margin: 0; padding: 16px 20px; border-radius: 12px; background: var(--rebaixo); border: 1px solid var(--borda); font-size: 14px; color: var(--texto-suave); line-height: 1.5; }
+.como-aviso b { color: var(--texto); }
+.kit-edicao { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.kit-edicao textarea { font: inherit; font-size: 15px; line-height: 1.5; color: var(--texto); background: var(--rebaixo); border: 1px solid var(--borda-forte); border-radius: 12px; padding: 12px 14px; resize: vertical; }
+.kit-edicao textarea:focus { outline: 2px solid var(--vermelho); outline-offset: 1px; }
+.kit-erros { margin: 0; padding: 12px 16px 12px 32px; font-size: 14px; line-height: 1.5; }
+.kit-abas[hidden], .kit-painel[hidden] { display: none; }
+.versao { margin-top: 24px; text-align: right; }

@@ -2,6 +2,7 @@ import "server-only";
 // Salão: consulta por telefone e resgate. Consulta direta ao banco, sem LLM.
 import { supabaseServidor } from "./supabase/server";
 import { aplicarNome } from "./kit-regras";
+import { carregarKits, kitAtual } from "./kit";
 import { carregarRegras, carregarRestaurante, encerrarPorTeto, expirarVencidos, lerCampanha, lerResgate } from "./dados";
 import { tetoEsgotado, valorDaVaga } from "./projecao";
 import { guardarVaga, situacaoTeto } from "./vagas";
@@ -90,7 +91,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
     const c = lerCampanha(b.campanhas);
     const [regras, kit, restaurante] = await Promise.all([
       carregarRegras(id),
-      db.from("kits").select("script_garcom").eq("campanha_id", c.id).maybeSingle(),
+      carregarKits([c.id]),
       carregarRestaurante(id),
     ]);
     const vaga = valorDaVaga(c, restaurante.ticket_medio, regras.desconto_max);
@@ -120,7 +121,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
       beneficio: textoBeneficio(c.tipo, c.valor, c.limite_por_conta),
       validade: formatarValidade(ocorrencias(c.data_janela, c.semanas), c.hora_inicio, c.hora_fim),
       antesDaJanela: new Date(b.valido_de).getTime() > agora,
-      script: kit.error || !kit.data?.script_garcom ? null : aplicarNome(kit.data.script_garcom, cliente.nome),
+      script: kit.has(c.id) ? aplicarNome(kitAtual(kit.get(c.id)!, c, restaurante).script_garcom, cliente.nome) : null,
       // O que esta mesa pode levar: o teto menos o gasto e as vagas guardadas por outras.
       calculo: {
         tipo: c.tipo,

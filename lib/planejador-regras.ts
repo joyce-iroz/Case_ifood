@@ -74,10 +74,11 @@ export type JanelaCardapio = {
 
 /** Limites por conta que a IA e o editor podem escolher (R$). Só para desconto em %. */
 export const LIMITES_POR_CONTA = [10, 15, 20, 25, 30, 40, 50];
-export const limitesDoCardapio = (c: Cardapio) => c.limites_por_conta ?? [];
+// Cardápio de antes do limite por conta: usa a lista fixa (também é fechada, em código).
+export const limitesDoCardapio = (c: Cardapio) => c.limites_por_conta ?? LIMITES_POR_CONTA;
 
 export type Cardapio = {
-  limites_por_conta?: number[]; // ausente em cardápios antigos: só "sem limite"
+  limites_por_conta?: number[]; // ausente em cardápios antigos: vale LIMITES_POR_CONTA
   restaurante: { nome: string; capacidade: number; ticket_medio: number };
   regras: Regras;
   segmentos_descricao: Record<Segmento, string>;
