@@ -19,6 +19,7 @@ import {
   validarContraCardapio,
   chaveCombo,
   paraContrato,
+  cardapioParaModelo,
   type Cardapio,
   type FatoSegmento,
   type SaidaModelo,
@@ -36,10 +37,10 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
 - aposta: rótulo curto do trade-off daquela alternativa, por exemplo "mais volume" (segmento maior), "mais barato" (desconto menor), "cliente novo" (delivery_nunca_veio).
 - As 3 alternativas devem diferir em janela ou em segmento, não só no valor.
 - dia_semana, hora_inicio e hora_fim: copie exatamente de UMA entrada de janelas_candidatas.
-- segmento: uma das chaves de "segmentos" dessa mesma janela, com elegiveis maior que zero.
-- clientes_alvo: copie o número "elegiveis" desse segmento nessa janela.
+- segmento: uma das chaves de "elegiveis" dessa mesma janela, com valor maior que zero.
+- clientes_alvo: copie o número de "elegiveis" desse segmento nessa janela.
 - tipo: "desconto_percentual" ou "desconto_valor". valor: um número da lista correspondente em valores_permitidos. Não use um tipo cuja lista esteja vazia.
-- custo_maximo: um número da lista custos_maximos_permitidos dessa janela.
+- custo_maximo: múltiplo de 50 entre custo_maximo_de e custo_maximo_ate dessa janela.
 - semanas: um número de semanas_permitidas (por quantas semanas a janela se repete). Use 1 se não houver motivo para repetir.
 - justificativa: duas ou três frases em português do Brasil, específicas desta alternativa:
   1. o problema da janela, com números: ocupação média e cadeiras-hora vazias;
@@ -202,7 +203,7 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
     for (let n = 1; n <= MAX_TENTATIVAS && !alternativas.length; n++) {
       const t0 = Date.now();
       const entrada = {
-        ...cardapio,
+        ...cardapioParaModelo(cardapio),
         ...(jaMostradasLista.length ? { propostas_ja_mostradas: jaMostradasLista.map(paraContrato) } : {}),
         ...(errosAnteriores.length ? { erros_da_tentativa_anterior: errosAnteriores } : {}),
       };

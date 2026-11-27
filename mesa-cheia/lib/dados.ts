@@ -73,11 +73,15 @@ function carregarRegistros(restauranteId: string, de: string, ate: string): Prom
 export async function obterResumoOcupacao(
   id = RESTAURANTE_DEMO_ID,
   restauranteCarregado?: Restaurante,
+  ocupacaoMin?: number,
 ): Promise<ResumoOcupacao> {
   const hoje = hojeNoFuso();
   const restaurante = restauranteCarregado ?? (await carregarRestaurante(id));
-  const registros = await carregarRegistros(id, somarDias(hoje, -DIAS_DE_HISTORICO), hoje);
-  return calcularOcupacao(restaurante, registros, hoje);
+  const [registros, minimo] = await Promise.all([
+    carregarRegistros(id, somarDias(hoje, -DIAS_DE_HISTORICO), hoje),
+    ocupacaoMin ?? carregarRegras(id).then((r) => r.ocupacao_min).catch(() => 50),
+  ]);
+  return calcularOcupacao(restaurante, registros, hoje, minimo);
 }
 
 // ------------------------------------------------------------ clientes e visitas

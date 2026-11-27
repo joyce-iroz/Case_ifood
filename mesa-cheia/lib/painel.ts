@@ -49,6 +49,7 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
   telefonesTeste: TelefoneTeste[];
   jaResgataram: TelefoneResgatado[];
   cadeirasRecuperadas30d: number;
+  receitaNova30d: number;
 }> {
   await verificarPausas(id);
   await expirarVencidos();
@@ -156,5 +157,14 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
   const desde = `${somarDias(hoje, -30)}T00:00:00-03:00`;
   const recentes = resgates.filter((r) => new Date(r.criado_em).getTime() >= new Date(desde).getTime());
 
-  return { campanhas: linhas, telefonesTeste, jaResgataram, cadeirasRecuperadas30d: cadeirasRecuperadas(recentes) };
+  const receitaNova30d =
+    Math.round(recentes.filter((r) => r.incremental).reduce((a, r) => a + r.valor_conta - r.desconto, 0) * 100) / 100;
+
+  return {
+    campanhas: linhas,
+    telefonesTeste,
+    jaResgataram,
+    cadeirasRecuperadas30d: cadeirasRecuperadas(recentes),
+    receitaNova30d,
+  };
 }

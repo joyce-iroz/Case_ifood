@@ -419,3 +419,28 @@ export function propostaFallback(
     };
   }
 }
+
+/**
+ * O cardápio como vai ao modelo, enxuto (o plano gratuito do Groq tem 8.000 tokens por
+ * minuto): a lista de tetos vira um intervalo, saem campos repetidos. A validação continua
+ * usando o cardápio completo.
+ */
+export function cardapioParaModelo(c: Cardapio) {
+  return {
+    restaurante: c.restaurante,
+    regras: c.regras,
+    valores_permitidos: c.valores_permitidos,
+    semanas_permitidas: semanasDoCardapio(c),
+    segmentos_fatos: c.segmentos_fatos ?? c.segmentos_descricao,
+    janelas_candidatas: c.janelas_candidatas.map((j) => ({
+      dia_semana: j.dia_semana,
+      hora_inicio: j.hora_inicio,
+      hora_fim: j.hora_fim,
+      ocupacao_media_pct: j.ocupacao_media_pct,
+      cadeiras_hora_vazias: j.cadeiras_hora_vazias,
+      custo_maximo_de: j.custos_maximos_permitidos[0] ?? 0,
+      custo_maximo_ate: j.custos_maximos_permitidos.at(-1) ?? 0,
+      elegiveis: Object.fromEntries(Object.entries(j.segmentos).map(([k, v]) => [k, v.elegiveis])),
+    })),
+  };
+}

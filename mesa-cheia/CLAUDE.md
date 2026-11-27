@@ -286,6 +286,13 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   com o erro exato se falhar. A resposta do planejador é o objeto
   `{"propostas": [...]}` (o modo JSON do formato OpenAI só devolve objeto);
   `validarAlternativas` aceita também o array puro.
+  **Limites do plano gratuito.** O Groq gratuito tem 8.000 tokens por minuto.
+  Ao modelo vai `cardapioParaModelo` (tetos como intervalo `custo_maximo_de`/
+  `custo_maximo_ate`, elegíveis como mapa; ~35% menor); a validação usa o
+  cardápio completo. Para `openai/gpt-oss` no Groq: `reasoning_effort: low` e
+  `max_completion_tokens: 2000`. HTTP 429 com espera de até 20 s (cabeçalho
+  Retry-After ou "try again in Xs") espera e repete uma vez (`pedirComEspera`);
+  senão vira erro legível, sem o id da organização.
 - **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
   chama `gerarKit` uma vez (formulário e planejador, sem distinção). Nunca no
   carregamento de página. Validação (`validarKit`): 4 campos de texto não
@@ -345,8 +352,14 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   ,5 para meia hora (18.5 = 18h30); `timeDaHora`/`horaDoTime`/`formatarHora`
   convertem. Uma visita registrada na hora cheia h conta para a janela se a
   hora h–h+1 encosta nela.
-- **Painel do dono (visual).** Número principal = cadeiras-hora recuperadas
-  com barra até a meta de referência (5% das vazias, `META_RECUPERACAO`).
+- **Painel do dono (visual).** Topo em dois blocos: "O problema" (cadeiras-hora
+  vazias em 30 dias, quantas nos horários abaixo do mínimo, `vaziasAbaixoMinimo30d`,
+  e o dinheiro que não entrou nelas = vazias fracas ÷ 1h30 × ticket médio, um
+  teto e não uma previsão) e "O que foi recuperado" (cadeiras-hora recuperadas,
+  receita de clientes novos em 30 dias, barra até a meta de 5% das vazias dos
+  horários fracos). Indicadores menores embaixo. Cartões de campanha com bloco
+  "Dinheiro" (receita de clientes novos, desconto dado, soma das contas,
+  quanto cada R$ 1 de desconto trouxe).
   Resultado de campanha em cartões: funil (emitidos → resgatados → clientes
   novos), barras recebeu × controle com o lift, custo por cliente novo em
   destaque; o resto em "Detalhes". Definições em ícones `Info` (tooltip por

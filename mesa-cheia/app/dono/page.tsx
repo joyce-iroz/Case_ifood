@@ -21,6 +21,7 @@ import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
 import { janelaMaisVazia, type ResumoOcupacao } from "@/lib/ocupacao";
 import { META_RECUPERACAO } from "@/lib/diagnostico";
+import { PERMANENCIA_H } from "@/lib/resultados";
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,8 @@ export default async function Dono({ searchParams }: { searchParams: Promise<Bus
               ctx={form.ctx}
               regras={regrasInfo}
               recuperadas={painel.cadeirasRecuperadas30d}
+              receitaNova={painel.receitaNova30d}
+              ticketMedio={restauranteInfo!.ticket_medio}
             />
             <section className="cartao-painel" aria-labelledby="t-plan">
               <Planejador inicial={planejamentos.find((x) => x.status === "proposta") ?? null} />
@@ -201,8 +204,8 @@ export default async function Dono({ searchParams }: { searchParams: Promise<Bus
 }
 
 /**
- * O número que o produto promete em destaque: cadeiras-hora recuperadas, com uma meta
- * de referência (5% das vazias, a mesma do diagnóstico). Os outros indicadores ficam menores.
+ * Topo do painel: o problema (cadeiras vazias e o dinheiro que não entrou) ao lado do
+ * que a ferramenta recuperou. Os outros indicadores ficam menores, embaixo.
  */
 function Destaque({
   resumo,
@@ -210,60 +213,94 @@ function Destaque({
   ctx,
   regras,
   recuperadas,
+  receitaNova,
+  ticketMedio,
 }: {
   resumo: ResumoOcupacao;
   painel: CampanhaPainel[];
   ctx: ContextoJanela;
   regras: Regras;
   recuperadas: number;
+  receitaNova: number;
+  ticketMedio: number;
 }) {
   const pior = janelaMaisVazia(resumo);
   const resgates = painel.reduce((s, c) => s + c.resultado.resgatados, 0);
   const incrementais = painel.reduce((s, c) => s + c.resultado.resgatesIncrementais, 0);
   const restante = Math.max(0, ctx.tetoRestanteMes);
   const usado = regras.teto_mes > 0 ? Math.min(100, ((regras.teto_mes - restante) / regras.teto_mes) * 100) : 0;
-  const meta = Math.max(1, Math.round(resumo.cadeirasHoraVazias30d * META_RECUPERACAO));
+  const fracas = resumo.vaziasAbaixoMinimo30d;
+  // Premissa: cada mesa fica 1h30; cada cadeira vazia nesse tempo é uma conta de ticket médio que não entrou.
+  const naoEntrou = Math.round((fracas / PERMANENCIA_H) * ticketMedio);
+  const meta = Math.max(1, Math.round(fracas * META_RECUPERACAO));
   const progresso = Math.min(100, (recuperadas / meta) * 100);
   const entregues = painel.filter((c) => c.kit?.entregue_em).length;
+  const reais = (v: number) => formatarMoeda(v).replace(/,00$/, "");
   return (
-    <section className="destaque" aria-label="Resumo">
-      <div className="destaque-principal">
-        <span className="kpi-rotulo">
-          Cadeiras-hora recuperadas · 30 dias{" "}
-          <Info texto="Pessoas trazidas por resgates incrementais (clientes que não vinham nessa janela) multiplicadas por 1h30 de permanência média." />
-        </span>
-        <div className="destaque-numeros">
-          <span className="destaque-valor">{fmt.format(recuperadas)}</span>
-          <span className="destaque-de">
-            de {fmt.format(resumo.cadeirasHoraVazias30d)} vazias no período
+    <>
+      <section className="destaque" aria-label="Resumo do mês">
+        <div className="destaque-bloco destaque-problema">
+          <span className="kpi-rotulo">O problema · últimos 30 dias</span>
+          <div className="destaque-numeros">
+            <span className="destaque-valor vermelho">{fmt.format(resumo.cadeirasHoraVazias30d)}</span>
+            <span className="destaque-de">cadeiras-hora vazias</span>
+          </div>
+          <p className="destaque-linha">
+            <b>{fmt.format(fracas)}</b> delas nos horários abaixo de {fmt.format(regras.ocupacao_min)}% de ocupação, onde
+            dá para agir.
+          </p>
+          <div className="destaque-dinheiro">
+            <span className="destaque-dinheiro-valor">{reais(naoEntrou)}</span>
+            <span>
+              em contas que não entraram nesses horários{" "}
+              <Info
+                texto={`Cadeiras-hora vazias nos horários fracos ÷ ${String(PERMANENCIA_H).replace(".", ",")}h de permanência × ticket médio de ${formatarMoeda(ticketMedio)}. É o teto do que dá para disputar, não uma previsão.`}
+              />
+            </span>
+          </div>
+        </div>
+
+        <div className="destaque-bloco destaque-recuperado">
+          <span className="kpi-rotulo">O que o Mesa Cheia recuperou · 30 dias</span>
+          <div className="destaque-numeros">
+            <span className="destaque-valor verde">{fmt.format(recuperadas)}</span>
+            <span className="destaque-de">
+              cadeiras-hora{" "}
+              <Info texto="Pessoas trazidas por resgates incrementais (clientes que não vinham nessa janela) × 1h30 de permanência média." />
+            </span>
+          </div>
+          <div className="destaque-dinheiro">
+            <span className="destaque-dinheiro-valor verde">{formatarMoeda(receitaNova)}</span>
+            <span>em contas de clientes novos, já descontado o benefício</span>
+          </div>
+          <div className="destaque-barra" role="img" aria-label={`${Math.round(progresso)}% da meta de ${fmt.format(meta)}`}>
+            <span style={{ width: `${Math.max(progresso, recuperadas > 0 ? 2 : 0)}%` }} />
+          </div>
+          <span className="kpi-nota">
+            {Math.round(progresso)}% da meta de referência: recuperar {Math.round(META_RECUPERACAO * 100)}% das vazias dos
+            horários fracos ({fmt.format(meta)} cadeiras-hora)
           </span>
         </div>
-        <div className="destaque-barra" role="img" aria-label={`${Math.round(progresso)}% da meta de ${fmt.format(meta)}`}>
-          <span style={{ width: `${Math.max(progresso, recuperadas > 0 ? 2 : 0)}%` }} />
-        </div>
-        <span className="kpi-nota">
-          {Math.round(progresso)}% da meta de referência: recuperar {Math.round(META_RECUPERACAO * 100)}% das vazias ({fmt.format(meta)} cadeiras-hora)
-        </span>
-      </div>
-      <div className="destaque-secundarios">
+      </section>
+
+      <section className="mini-kpis" aria-label="Indicadores">
         {pior && (
           <div className="mini-kpi">
             <span>Janela mais vazia</span>
             <b>
               {NOMES_DIA[pior.dia]} {pior.inicio}h–{pior.fim}h
             </b>
-            <small>{fmt.format(Math.round(pior.percentual))}% de ocupação</small>
+            <small>{fmt.format(Math.round(pior.percentual))}% de ocupação média</small>
           </div>
         )}
         <div className="mini-kpi">
           <span>Teto de descontos · {ctx.mes.split("-").reverse().join("/")}</span>
-          <b>{formatarMoeda(restante).replace(",00", "")}</b>
+          <b>{reais(restante)}</b>
           <div className="kpi-barra" aria-hidden="true">
             <span style={{ width: `${usado}%` }} />
           </div>
           <small>
-            restantes de {formatarMoeda(regras.teto_mes).replace(",00", "")} ·{" "}
-            <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
+            restantes de {reais(regras.teto_mes)} · <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
           </small>
         </div>
         <div className="mini-kpi">
@@ -285,8 +322,8 @@ function Destaque({
             <Link href="/dono?aba=campanhas">ver kits</Link>
           </small>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 
@@ -394,6 +431,31 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
           )}
         </div>
 
+        <div className="campanha-bloco campanha-dinheiro">
+          <span className="bloco-titulo">Dinheiro</span>
+          <div className="dinheiro-linha">
+            <span>
+              Receita de clientes novos <Info texto="Contas dos resgates incrementais, já descontado o benefício." />
+            </span>
+            <b className={r.receitaIncremental > 0 ? "verde" : undefined}>{formatarMoeda(r.receitaIncremental)}</b>
+          </div>
+          <div className="dinheiro-linha">
+            <span>Desconto dado</span>
+            <b>− {formatarMoeda(r.custoDescontos)}</b>
+          </div>
+          <div className="dinheiro-linha">
+            <span>Soma das contas</span>
+            <b>{formatarMoeda(r.somaContas)}</b>
+          </div>
+          <p className="legenda">
+            {r.custoDescontos > 0
+              ? r.receitaIncremental > 0
+                ? `Cada R$ 1 de desconto trouxe ${formatarMoeda(r.receitaIncremental / r.custoDescontos)} em contas novas.`
+                : "O desconto não trouxe conta nova: foi para quem já vinha."
+              : "Ainda sem resgates."}
+          </p>
+        </div>
+
         <div className="campanha-bloco campanha-chave">
           <span className="bloco-titulo">
             Custo por cliente novo{" "}
@@ -427,26 +489,12 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
         </summary>
         <dl className="campanha-detalhes">
           <div>
-            <dt>Soma das contas</dt>
-            <dd>{formatarMoeda(r.somaContas)}</dd>
-          </div>
-          <div>
-            <dt>
-              Receita de clientes novos <Info texto="Contas dos resgates incrementais, já descontado o benefício." />
-            </dt>
-            <dd>{formatarMoeda(r.receitaIncremental)}</dd>
-          </div>
-          <div>
             <dt>
               Canibalizados <Info texto="Desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de escolher janela e público." />
             </dt>
             <dd className={alerta ? "alerta-texto" : undefined}>
               {r.resgatesCanibalizados} · {formatarMoeda(r.custoCanibalizado)}
             </dd>
-          </div>
-          <div>
-            <dt>Custo em descontos</dt>
-            <dd>{formatarMoeda(r.custoDescontos)}</dd>
           </div>
         </dl>
         <div className="rolagem">

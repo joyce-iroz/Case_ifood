@@ -78,14 +78,19 @@ async function chamarCompativelOpenAI(
           { role: "user", content: usuario },
         ],
         ...(comFormato ? { response_format: { type: "json_object" } } : {}),
+        // gpt-oss no Groq: raciocínio curto e resposta limitada. O limite gratuito conta
+        // tokens por minuto, inclusive os de raciocínio; isto cabe 3 tentativas num minuto.
+        ...(p === "groq" && modelo.startsWith("openai/gpt-oss")
+          ? { reasoning_effort: "low", max_completion_tokens: 2000 }
+          : {}),
       }),
       signal,
     });
-  let resp = await pedir(true);
+  let resp = await pedirComEspera(() => pedir(true));
   // Modelo sem modo JSON: pede de novo sem ele; o parser já tira cercas de código.
   if (resp.status === 400) {
     const corpo = await resp.text().catch(() => "");
-    if (/response_format|json/i.test(corpo)) resp = await pedir(false);
+    if (/response_format|json/i.test(corpo)) resp = await pedirComEspera(() => pedir(false));
     else throw new Error(`${NOME[p]} respondeu HTTP 400: ${corpo.slice(0, 300)}`);
   }
   if (!resp.ok) await falhaHttp(resp, NOME[p]);
@@ -96,8 +101,31 @@ async function chamarCompativelOpenAI(
 }
 
 async function falhaHttp(resp: Response, quem: string): Promise<never> {
-  const corpo = await resp.text().catch(() => "");
+  const corpo = (await resp.text().catch(() => "")).replace(/org_[A-Za-z0-9]+/g, "org_…");
+  if (resp.status === 429)
+    throw new Error(
+      `${quem} atingiu o limite de uso do plano (HTTP 429). Espere um minuto e gere de novo. Detalhe: ${corpo.slice(0, 160)}`,
+    );
   throw new Error(`${quem} respondeu HTTP ${resp.status}: ${corpo.slice(0, 300)}`);
+}
+
+const ESPERA_MAXIMA_S = 20;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Limite por minuto (HTTP 429): se o provedor disser em quanto tempo libera (cabeçalho
+ * Retry-After ou "try again in 3.5s" no corpo) e for até 20 s, espera e repete uma vez.
+ */
+async function pedirComEspera(fazer: () => Promise<Response>): Promise<Response> {
+  const resp = await fazer();
+  if (resp.status !== 429) return resp;
+  const corpo = await resp.clone().text().catch(() => "");
+  const cabecalho = Number(resp.headers.get("retry-after"));
+  const m = corpo.match(/try again in ([\d.]+)\s*(ms|s)/i);
+  const segundos = Number.isFinite(cabecalho) && cabecalho > 0 ? cabecalho : m ? Number(m[1]) / (m[2] === "ms" ? 1000 : 1) : NaN;
+  if (!(segundos > 0 && segundos <= ESPERA_MAXIMA_S)) return resp;
+  await dormir(segundos * 1000 + 300);
+  return fazer();
 }
 
 /** Manda instrução de sistema + mensagem e devolve o texto da resposta, pedindo JSON (objeto). */
@@ -111,16 +139,18 @@ export async function gerarJson(sistema: string, usuario: string, timeoutMs = 25
   if (conf.provedor !== "gemini") return chamarCompativelOpenAI(conf.provedor, chave, modelo, sistema, usuario, signal);
 
   // Gemini: sem parâmetros de amostragem, a linha 3.5 não aceita mais temperature/top_p.
-  const resp = await fetch(`${baseUrl("gemini")}/models/${encodeURIComponent(modelo)}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": chave },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: sistema }] },
-      contents: [{ role: "user", parts: [{ text: usuario }] }],
-      generationConfig: { responseMimeType: "application/json" },
+  const resp = await pedirComEspera(() =>
+    fetch(`${baseUrl("gemini")}/models/${encodeURIComponent(modelo)}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": chave },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sistema }] },
+        contents: [{ role: "user", parts: [{ text: usuario }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+      signal,
     }),
-    signal,
-  });
+  );
   if (!resp.ok) await falhaHttp(resp, "Gemini");
   const j = (await resp.json()) as { candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[] };
   const texto = j.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";

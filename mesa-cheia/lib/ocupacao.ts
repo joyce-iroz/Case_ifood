@@ -23,6 +23,8 @@ export type ResumoOcupacao = {
   horas: number[];
   celulas: CelulaOcupacao[];
   cadeirasHoraVazias30d: number;
+  /** Das vazias dos 30 dias, as que caíram em horas cuja média está abaixo de `ocupacaoMin`. */
+  vaziasAbaixoMinimo30d: number;
 };
 
 /**
@@ -33,6 +35,7 @@ export function calcularOcupacao(
   r: Restaurante,
   registros: RegistroOcupacao[],
   hoje: string,
+  ocupacaoMin = 50,
 ): ResumoOcupacao {
   const soma = new Map<string, { pessoas: number; n: number }>();
   const inicio30 = somarDias(hoje, -30);
@@ -63,6 +66,16 @@ export function calcularOcupacao(
     }
   }
 
+  // Segunda passada: vazias dos 30 dias nas horas que, na média, ficam abaixo do mínimo.
+  // É a parte que uma campanha consegue atacar (horário cheio não se enche mais).
+  const media = new Map(celulas.map((c) => [`${c.dia}-${c.hora}`, c.percentual]));
+  let abaixo30 = 0;
+  for (const reg of registros) {
+    if (reg.data < inicio30 || reg.data >= hoje) continue;
+    if ((media.get(`${diaDaSemana(reg.data)}-${reg.hora}`) ?? 100) < ocupacaoMin)
+      abaixo30 += Math.max(0, r.capacidade - reg.pessoas);
+  }
+
   return {
     restaurante: { id: r.id, nome: r.nome, capacidade: r.capacidade },
     periodo: { de, ate },
@@ -70,6 +83,7 @@ export function calcularOcupacao(
     horas,
     celulas,
     cadeirasHoraVazias30d: vazias30,
+    vaziasAbaixoMinimo30d: abaixo30,
   };
 }
 
