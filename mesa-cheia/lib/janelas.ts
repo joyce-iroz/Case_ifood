@@ -74,3 +74,19 @@ export function calcularCandidatas(
   }
   return lista.sort((a, b) => b.cadeirasVazias - a.cadeirasVazias || a.dia - b.dia || a.inicio - b.inicio);
 }
+
+/**
+ * Escolhe até `n` candidatas sem deixar um dia tomar a lista toda: rodízio entre os
+ * dias, cada um na sua ordem de cadeiras vazias. Sem isso, as 12 primeiras seriam
+ * todas de terça e o dono não veria quarta. A lista final volta à ordem por cadeiras vazias.
+ */
+export function espalharPorDia(candidatas: JanelaCandidata[], n: number): JanelaCandidata[] {
+  const porDia = new Map<number, JanelaCandidata[]>();
+  for (const c of candidatas) (porDia.get(c.dia) ?? porDia.set(c.dia, []).get(c.dia)!).push(c);
+  // Dias na ordem da melhor janela de cada um.
+  const filas = [...porDia.values()].sort((a, b) => b[0].cadeirasVazias - a[0].cadeirasVazias);
+  const escolhidas: JanelaCandidata[] = [];
+  for (let i = 0; escolhidas.length < n && filas.some((f) => i < f.length); i++)
+    for (const f of filas) if (i < f.length && escolhidas.length < n) escolhidas.push(f[i]);
+  return escolhidas.sort((a, b) => b.cadeirasVazias - a.cadeirasVazias || a.dia - b.dia || a.inicio - b.inicio);
+}

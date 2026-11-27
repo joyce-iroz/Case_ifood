@@ -244,7 +244,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   1. Código calcula as janelas candidatas (`calcularCandidatas`): de 1h a 3h,
      em passos de 30 min, sem os primeiros e últimos 30 min de cada turno,
      toda meia hora abaixo de `ocupacao_min`, ordenadas por cadeiras-hora
-     vazias absolutas. As 12 primeiras vão ao modelo.
+     vazias absolutas. Vão ao modelo 12, escolhidas por `espalharPorDia`
+     (rodízio entre os dias, para terça não tomar a lista e quarta aparecer). O
+     editor mostra os dias como botões e as janelas do dia embaixo; dia sem
+     janela de 1h abaixo do mínimo não aparece (use o formulário manual).
   2. Código monta o cardápio (`montarCardapio`): por janela, elegíveis por
      segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`: de R$ 50
      em R$ 50 até o saldo); valores permitidos por tipo (`opcoesValor`, todos
@@ -318,11 +321,14 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   `conferirNumeros`: todo "N%" ou "R$ N" escrito tem de ser o benefício da
   campanha (o garçom lê em voz alta); e `conferirEspecifico`: nenhuma frase de
   `FRASES_GENERICAS` ("benefício da casa", "aproveite"...), a mensagem da equipe
-  cita o dia e a hora de início, e o único marcador é `{nome}`, só no script e
-  só se `publico.usar_nome` (não vale para `cozinha_similar`). A entrada leva
+  cita o dia e a hora de início, e nenhum marcador (`{nome}` incluído): o script não
+  diz o nome do cliente, porque na mesa pode haver quem não recebeu oferta
+  (`publico.usar_nome` é sempre false). A entrada leva
   `publico` (`publicoDoSegmento`: quem é o cliente e como falar com ele), montada
-  por `entradaKit`. O salão troca `{nome}` pelo primeiro nome (`aplicarNome`, no
-  servidor); o painel mostra "[nome do cliente]". O template também é por público. Falhou: mais uma tentativa com os erros;
+  por `entradaKit`. Kits antigos com `{nome}` ainda são trocados pelo primeiro nome
+  (`aplicarNome`, no servidor). Para `nenhum` e `resgatado`, o salão mostra uma
+  fala fixa em código (`FALA_SEM_BENEFICIO`, `falaJaUsado`), para o cliente sem
+  oferta não se sentir passado para trás. O template também é por público. Falhou: mais uma tentativa com os erros;
   falhou de novo: fica o texto que já estava. HTTP 429 ou falta de chave param na
   hora, sem segunda tentativa. A campanha nunca quebra por causa do kit. Nome e cozinha do restaurante entram
   no prompt como dados não confiáveis; a saída só é exibida, não toca valor,
@@ -355,6 +361,8 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   Premissa de desconto: a taxa acompanha a raiz da razão entre o desconto proposto
   e o de referência (`ELASTICIDADE` 0,5; o dobro do desconto dá ~41% mais
   resgates), limitada entre metade e o dobro.
+  Premissa de duração: a taxa acompanha a raiz da razão entre a duração da janela
+  e a de referência (a do histórico, ou 2h), limitada entre metade e 1,5 vez.
   Premissa de semanas: cada semana extra soma metade da taxa, até dobrar.
   O teto corta: resgates = mín(procura, teto ÷ desconto típico), porque depois do
   teto o salão aplica desconto zero; a tela avisa quando o teto limita.

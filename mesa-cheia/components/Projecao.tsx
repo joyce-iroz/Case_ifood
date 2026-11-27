@@ -3,6 +3,20 @@ import type { Projecao } from "@/lib/projecao";
 
 const pct = (v: number) => `${String(Math.round(v * 1000) / 10).replace(".", ",")}%`;
 
+const horas = (h: number) => `${String(Math.round(h * 10) / 10).replace(".", ",")}h`;
+
+/** Quais premissas mexeram na taxa, em palavras. */
+function ajustes(p: Projecao): string {
+  const partes: string[] = [];
+  if (Math.abs(p.fatorDesconto - 1) > 0.005)
+    partes.push(
+      `desconto de ${formatarMoeda(p.descontoMedio)} contra ${formatarMoeda(p.descontoRef)} da referência (a taxa acompanha a raiz da razão: o dobro do desconto traz ~41% mais resgates)`,
+    );
+  if (Math.abs(p.fatorDuracao - 1) > 0.005)
+    partes.push(`janela de ${horas(p.horas)} contra ${horas(p.horasRef)} da referência (mesma regra da raiz; janela maior cabe na rotina de mais gente)`);
+  return partes.length ? ` por causa de: ${partes.join("; ")}` : "";
+}
+
 /** Retorno esperado de uma campanha. Sem estado: serve ao planejador e ao formulário. */
 export function ProjecaoView({ projecao, controle }: { projecao: Projecao; controle: number }) {
   const p = projecao;
@@ -12,8 +26,8 @@ export function ProjecaoView({ projecao, controle }: { projecao: Projecao; contr
         <b>Retorno esperado</b>
         <span className="legenda">
           {p.base === "historico"
-            ? `pelo histórico deste segmento: ${pct(p.taxaReferencia)} de resgate com desconto de ${formatarMoeda(p.descontoRef)}, ${pct(p.taxaIncremental)} incrementais`
-            : `sem histórico deste segmento: ${pct(p.taxaReferencia)} de resgate (padrão, com desconto de ${formatarMoeda(p.descontoRef)}), ${pct(p.taxaIncremental)} incrementais pela definição do segmento`}
+            ? `pelo histórico deste segmento: ${pct(p.taxaReferencia)} de resgate com desconto de ${formatarMoeda(p.descontoRef)} em janela de ${horas(p.horasRef)}, ${pct(p.taxaIncremental)} incrementais`
+            : `sem histórico deste segmento: ${pct(p.taxaReferencia)} de resgate (padrão, com desconto de ${formatarMoeda(p.descontoRef)} em janela de ${horas(p.horasRef)}), ${pct(p.taxaIncremental)} incrementais pela definição do segmento`}
         </span>
       </div>
       <div className="projecao-numeros">
@@ -44,9 +58,13 @@ export function ProjecaoView({ projecao, controle }: { projecao: Projecao; contr
         {p.emitidos} recebem o benefício
         {controle > 0 ? `; ${controle} sorteados ficam no grupo de controle, sem benefício, para medir o efeito real.` : "."}{" "}
         Desconto típico de {formatarMoeda(p.descontoMedio)} por conta de ticket médio
-        {Math.abs(p.taxaBase - p.taxaReferencia) > 0.0005
-          ? `; com ele, a taxa de resgate passa de ${pct(p.taxaReferencia)} para ${pct(p.taxaBase)} (premissa: a taxa acompanha a raiz da razão entre os descontos; o dobro do desconto traz cerca de 41% mais resgates).`
-          : "."}
+        {". "}
+        {Math.abs(p.taxaBase - p.taxaReferencia) > 0.0005 && (
+          <>
+            A taxa de resgate passa de {pct(p.taxaReferencia)} para {pct(p.taxaBase)}
+            {ajustes(p)}.
+          </>
+        )}
         {p.semanas > 1 &&
           ` Com ${p.semanas} semanas, premissa: cada semana extra soma metade da taxa de uma semana (${pct(p.taxaBase)}), até dobrar; cada benefício continua valendo um resgate só.`}
       </p>

@@ -98,6 +98,7 @@ export async function carregarBase(id = RESTAURANTE_DEMO_ID) {
         resgates: resgatesPor.get(c.id)?.n ?? 0,
         incrementais: resgatesPor.get(c.id)?.inc ?? 0,
         descontoTipico: descontoTipico(c.tipo, c.valor, restaurante.ticket_medio, regras.desconto_max),
+        horas: c.hora_fim - c.hora_inicio,
       })),
   );
 

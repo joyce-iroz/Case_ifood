@@ -740,3 +740,6 @@ code, .mono { font-family: var(--fonte-mono); }
 .kit-cabeca .botao-ia { margin-left: auto; min-height: 36px; }
 .kit-falha { margin: 0 0 12px; }
 .projecao-teto { margin: 10px 0 0; }
+.dias-editor { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.dias-editor .opcao { min-width: 64px; }
+.editor-janelas > .legenda { margin-top: 8px; }

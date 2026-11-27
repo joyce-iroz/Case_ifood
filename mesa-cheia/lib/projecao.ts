@@ -29,6 +29,12 @@ export const DESCONTO_REF_PADRAO_PCT = 10;
  * e o dobro da taxa de referência.
  */
 export const ELASTICIDADE = 0.5;
+/**
+ * Premissa de duração: janela mais longa cabe na rotina de mais gente. A taxa acompanha
+ * a raiz da razão entre a duração proposta e a de referência (a das campanhas do
+ * histórico, ou 2h sem histórico), limitada entre metade e 1,5 vez.
+ */
+export const HORAS_REF_PADRAO = 2;
 
 export type Taxa = {
   resgate: number;
@@ -36,11 +42,12 @@ export type Taxa = {
   base: "historico" | "padrao";
   emitidos: number;
   descontoRef: number | null; // R$ por conta de ticket médio no histórico; null = padrão
+  horasRef: number | null;    // duração média das janelas do histórico; null = padrão
 };
 export type Taxas = Record<Segmento, Taxa>;
 
 export function calcularTaxas(
-  encerradas: { segmento: Segmento; emitidos: number; resgates: number; incrementais: number; descontoTipico: number }[],
+  encerradas: { segmento: Segmento; emitidos: number; resgates: number; incrementais: number; descontoTipico: number; horas: number }[],
 ): Taxas {
   const t = {} as Taxas;
   for (const { id } of SEGMENTOS) {
@@ -56,6 +63,7 @@ export function calcularTaxas(
       emitidos,
       // Desconto de referência: média dos descontos típicos, pesada pelos emitidos.
       descontoRef: temHistorico ? r2(cs.reduce((a, c) => a + c.descontoTipico * c.emitidos, 0) / emitidos) : null,
+      horasRef: temHistorico ? r2(cs.reduce((a, c) => a + c.horas * c.emitidos, 0) / emitidos) : null,
     };
   }
   return t;
@@ -74,8 +82,12 @@ export type Projecao = {
   taxaIncremental: number;
   semanas: number;
   taxaBase: number; // taxa de resgate de uma semana, já ajustada pelo desconto
-  taxaReferencia: number; // taxa do histórico (ou padrão), no desconto de referência
+  taxaReferencia: number; // taxa do histórico (ou padrão), no desconto e duração de referência
   descontoRef: number; // R$ por conta a que a taxa de referência corresponde
+  horas: number; // duração da janela proposta
+  horasRef: number; // duração a que a taxa de referência corresponde
+  fatorDesconto: number;
+  fatorDuracao: number;
   demanda: number; // resgates esperados se o teto não acabasse
   cabeNoTeto: number; // quantos descontos típicos o teto paga
   limitadoPeloTeto: boolean;
@@ -91,6 +103,7 @@ export function descontoTipico(tipo: TipoBeneficio, valor: number, ticket: numbe
 
 export function projetar(p: {
   emitidos: number;
+  horas: number; // duração da janela (fim − início)
   semanas: number;
   tipo: TipoBeneficio;
   valor: number;
@@ -105,7 +118,9 @@ export function projetar(p: {
   const descontoRef = p.taxa.descontoRef ?? r2((p.ticketMedio * DESCONTO_REF_PADRAO_PCT) / 100);
   const fatorDesconto =
     descontoRef > 0 && descontoMedio > 0 ? Math.min(2, Math.max(0.5, (descontoMedio / descontoRef) ** ELASTICIDADE)) : 1;
-  const taxaBase = Math.min(1, p.taxa.resgate * fatorDesconto);
+  const horasRef = p.taxa.horasRef ?? HORAS_REF_PADRAO;
+  const fatorDuracao = p.horas > 0 && horasRef > 0 ? Math.min(1.5, Math.max(0.5, (p.horas / horasRef) ** 0.5)) : 1;
+  const taxaBase = Math.min(1, p.taxa.resgate * fatorDesconto * fatorDuracao);
   const fatorSemanas = Math.min(2, 1 + 0.5 * (p.semanas - 1));
   const taxaResgate = Math.min(1, taxaBase * fatorSemanas);
   const demanda = Math.round(p.emitidos * taxaResgate);
@@ -132,6 +147,10 @@ export function projetar(p: {
     taxaBase,
     taxaReferencia: p.taxa.resgate,
     descontoRef,
+    horas: p.horas,
+    horasRef,
+    fatorDesconto,
+    fatorDuracao,
     demanda,
     cabeNoTeto,
     limitadoPeloTeto: demanda > cabeNoTeto,

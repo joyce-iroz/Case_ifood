@@ -8,7 +8,7 @@ import { RESTAURANTE_DEMO_ID, formatarHora, formatarJanela, NOMES_DIA } from "./
 import { avaliarJanela, avaliarProposta, carregarBase, criarCampanha, tamanhoControle, type Base, type ResultadoCriacao } from "./emissao";
 import { projetar, type Projecao } from "./projecao";
 import { gerarJson, LimiteError, modeloConfigurado, SemChaveError } from "./llm";
-import { calcularCandidatas } from "./janelas";
+import { calcularCandidatas, espalharPorDia } from "./janelas";
 import {
   JANELAS_NO_CARDAPIO,
   MAX_TENTATIVAS,
@@ -119,7 +119,7 @@ function fatosDosSegmentos(base: Base): Record<Segmento, FatoSegmento> {
 
 function cardapioDaBase(base: Base): Cardapio {
   const candidatas = calcularCandidatas(base.resumo, base.restaurante, base.regras.ocupacao_min);
-  const janelas = candidatas.slice(0, JANELAS_NO_CARDAPIO).map((c) => {
+  const janelas = espalharPorDia(candidatas, JANELAS_NO_CARDAPIO).map((c) => {
     const ctx = avaliarJanela(base, { dia: c.dia, inicio: c.inicio, fim: c.fim });
     const elegiveis = Object.fromEntries(
       SEGMENTOS.map((s) => [s.id, ctx.elegiveisPorSegmento.get(s.id)!.elegiveis.length]),
@@ -447,6 +447,7 @@ function projetarPara(p: PropostaCampanha, elegiveis: number, base: Base): { con
     controle,
     projecao: projetar({
       emitidos: elegiveis - controle,
+      horas: p.hora_fim - p.hora_inicio,
       semanas: p.semanas,
       tipo: p.tipo,
       valor: p.valor,

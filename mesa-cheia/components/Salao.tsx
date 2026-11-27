@@ -5,6 +5,7 @@ import { calcularDesconto } from "@/lib/campanha";
 import { FUSO, formatarMoeda } from "@/lib/dominio";
 import { mascararTelefone } from "@/lib/telefone";
 import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
+import { FALA_SEM_BENEFICIO, falaJaUsado } from "@/lib/kit-regras";
 import type { RespostaConsulta, RespostaResgate } from "@/lib/resgate";
 
 type Estado =
@@ -23,6 +24,7 @@ const dataHora = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
+const dataCurta = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, day: "2-digit", month: "2-digit" });
 
 export function Salao() {
   const [digitos, setDigitos] = useState("");
@@ -136,9 +138,12 @@ export function Salao() {
       )}
 
       {estado.fase === "resposta" && estado.r.tipo === "nenhum" && (
-        <div className="cartao neutro">
-          <p>Nenhum benefício ativo para este telefone.</p>
-        </div>
+        <>
+          <div className="cartao neutro">
+            <p>Nenhum benefício ativo para este telefone.</p>
+          </div>
+          <Fala texto={FALA_SEM_BENEFICIO} />
+        </>
       )}
 
       {estado.fase === "resposta" && estado.r.tipo === "resgatado" && (
@@ -149,6 +154,9 @@ export function Salao() {
             <b>{formatarMoeda(estado.r.valorConta)}</b> (desconto de {formatarMoeda(estado.r.desconto)}).
           </p>
         </div>
+      )}
+      {estado.fase === "resposta" && estado.r.tipo === "resgatado" && (
+        <Fala texto={falaJaUsado(`em ${dataCurta.format(new Date(estado.r.resgatadoEm))}`)} />
       )}
 
       {estado.fase === "aplicado" && (
@@ -216,6 +224,15 @@ export function Salao() {
         </button>
       )}
     </div>
+  );
+}
+
+function Fala({ texto }: { texto: string }) {
+  return (
+    <figure className="fala">
+      <figcaption>O que dizer ao cliente</figcaption>
+      <blockquote>{texto}</blockquote>
+    </figure>
   );
 }
 
@@ -355,12 +372,7 @@ function CartaoAtivo({
         {erro && <p className="salao-status">{erro}</p>}
       </div>
 
-      {r.script && (
-        <figure className="fala">
-          <figcaption>O que dizer ao cliente</figcaption>
-          <blockquote>{r.script}</blockquote>
-        </figure>
-      )}
+      {r.script && <Fala texto={r.script} />}
 
       <div className="espaco" />
       <button className="botao-grande primario" onClick={aplicar} disabled={!podeAplicar}>

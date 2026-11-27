@@ -39,7 +39,8 @@ export type Publico = {
 };
 
 export function publicoDoSegmento(segmento: Segmento, cozinha: string, dia: string): Publico {
-  const base = { segmento, usar_nome: true };
+  // Ninguém tem o nome dito em voz alta: na mesa pode haver quem não recebeu oferta.
+  const base = { segmento, usar_nome: false };
   switch (segmento) {
     case "frequenta_janela":
       return { ...base, quem: `cliente que já costuma vir na ${dia} nesse horário`, abordagem: "agradecer por ser freguês desse horário; não tratar como novidade nem como primeira visita" };
@@ -190,22 +191,22 @@ export function kitTemplate(e: EntradaKit): TextosKit {
   const num = artigoDia(e.dia);
   const porPublico: Record<Segmento, { script: string; titulo: string; linha: string }> = {
     frequenta_janela: {
-      script: `{nome}, obrigado por estar sempre com a gente na ${e.dia}. Hoje sua conta tem ${b}. Posso aplicar?`,
+      script: `Você é de vir na ${e.dia}, né? Por isso hoje sua conta tem ${b}. Posso aplicar?`,
       titulo: `Cliente de ${e.dia}?`,
       linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
     },
     frequenta_outras: {
-      script: `{nome}, que bom te ver aqui ${num} ${e.dia}. Por ter vindo nesse horário, sua conta tem ${b}. Posso aplicar?`,
+      script: `Que bom te ver aqui ${num} ${e.dia}. Por ter vindo nesse horário, sua conta tem ${b}. Posso aplicar?`,
       titulo: `Veio ${num} ${e.dia}?`,
       linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
     },
     delivery_nunca_veio: {
-      script: `{nome}, você já conhecia nossa comida pelo delivery, né? Para a primeira vez no salão, sua conta tem ${b}. Posso aplicar?`,
+      script: `Você já conhecia nossa comida pelo delivery, né? Para a primeira vez no salão, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Primeira vez no salão?",
       linha: "Se você pede nosso delivery e recebeu a mensagem, diga seu telefone ao garçom na conta.",
     },
     sumiu_60_dias: {
-      script: `{nome}, que bom te ver de volta. Para marcar a volta, sua conta tem ${b}. Posso aplicar?`,
+      script: `Que bom te ver de volta. Para marcar a volta, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Que bom te ver de volta",
       linha: "Se você recebeu nossa mensagem, diga seu telefone ao garçom na hora da conta.",
     },
@@ -221,8 +222,20 @@ export function kitTemplate(e: EntradaKit): TextosKit {
     mensagem_equipe:
       `Pessoal, campanha ${e.janela}: ${b} para quem recebeu a oferta (${e.publico.quem}). ` +
       `Começa ${e.dia} às ${e.hora_inicio}. No fechamento da conta, digitem o telefone do cliente na tela do salão. ` +
-      `Se aparecer benefício, leiam a frase da tela e toquem em Aplicar. Se não aparecer, segue normal.`,
+      `Se aparecer benefício, leiam a frase da tela em tom de conversa, só para quem deu o telefone, e toquem em Aplicar. ` +
+      `Se não aparecer, leiam a frase que a tela mostra para esse caso: ninguém sai achando que foi esquecido.`,
     cartaz_titulo: t.titulo,
     cartaz_linha: t.linha,
   };
 }
+
+/**
+ * O que o atendente diz quando o telefone não tem oferta. Texto fixo em código: o salão
+ * nunca chama modelo. Explica sem fazer o cliente se sentir passado para trás.
+ */
+export const FALA_SEM_BENEFICIO =
+  "Neste telefone não tem oferta hoje. A gente manda as ofertas por mensagem, para dias e horários específicos; quando chegar uma para você, é só dizer o telefone na hora da conta.";
+
+/** O que dizer quando a oferta deste telefone já foi usada. */
+export const falaJaUsado = (quando: string) =>
+  `Essa oferta já foi usada ${quando}. Cada oferta vale uma vez; quando chegar outra por mensagem, é só dizer o telefone na hora da conta.`;

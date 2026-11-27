@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { formatarHora, formatarMoeda, NOMES_DIA } from "@/lib/dominio";
+import { formatarHora, formatarMoeda, NOMES_DIA, ordenarDiasSemana } from "@/lib/dominio";
 import { textoBeneficio, type Bloqueio, type PropostaCampanha } from "@/lib/campanha";
 import {
   DIAS_TEXTO,
@@ -390,15 +390,41 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
     aoMudar({ ...p, tipo, valor });
   }
 
+  // Dias com janela candidata, na ordem da semana (seg → dom). O dono escolhe o dia e
+  // depois a janela daquele dia; trocar de dia já seleciona a janela mais vazia dele.
+  const diaDe = (j: { dia_semana: string }) => DIAS_TEXTO.indexOf(j.dia_semana as (typeof DIAS_TEXTO)[number]);
+  const dias = ordenarDiasSemana([...new Set(cardapio.janelas_candidatas.map(diaDe))]);
+  const diaAtual = diaDe(janela);
+  const doDia = cardapio.janelas_candidatas.filter((j) => diaDe(j) === diaAtual);
+  function trocarDia(d: number) {
+    const melhor = cardapio.janelas_candidatas
+      .filter((j) => diaDe(j) === d)
+      .sort((a, b) => b.cadeiras_hora_vazias - a.cadeiras_hora_vazias)[0];
+    if (melhor) trocarJanela(chaveJanela(melhor));
+  }
+
   const iTeto = Math.max(0, tetos.indexOf(p.teto));
   const mudarTeto = (i: number) => aoMudar({ ...p, teto: tetos[Math.min(tetos.length - 1, Math.max(0, i))] });
 
   return (
     <div className="editor-campos">
       <fieldset className="campo editor-janelas">
-        <legend>Janela · as {cardapio.janelas_candidatas.length} com mais cadeiras vazias</legend>
+        <legend>Dia e janela</legend>
+        <div className="dias-editor" role="group" aria-label="Dia">
+          {dias.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className="opcao"
+              aria-pressed={d === diaAtual}
+              onClick={() => trocarDia(d)}
+            >
+              {NOMES_DIA[d]}
+            </button>
+          ))}
+        </div>
         <div className="janelas-grade" role="radiogroup" aria-label="Janela">
-          {cardapio.janelas_candidatas.map((j) => {
+          {doDia.map((j) => {
             const ativa = chaveJanela(j) === chaveJanela(janela);
             return (
               <button
@@ -417,6 +443,10 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
             );
           })}
         </div>
+        <p className="legenda">
+          Só aparecem dias com janela de 1h ou mais abaixo de {num(cardapio.regras.ocupacao_min)}% de ocupação. Para outro dia,
+          use a <a href="/dono?aba=configurar#nova">campanha manual</a>.
+        </p>
       </fieldset>
       <label className="campo">
         Segmento

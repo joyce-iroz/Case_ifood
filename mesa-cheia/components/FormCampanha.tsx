@@ -120,6 +120,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
       controle,
       p: projetar({
         emitidos: elegiveis - controle,
+        horas: fim - inicio,
         semanas,
         tipo,
         valor: v,
