@@ -8,6 +8,7 @@ import { KitAtivacao } from "@/components/KitAtivacao";
 import { BotaoSimularCheia } from "@/components/BotaoSimularCheia";
 import { Planejador } from "@/components/Planejador";
 import { Tentativas } from "@/components/Tentativas";
+import { Info } from "@/components/Info";
 import { listarPlanejamentos, type PlanejamentoView } from "@/lib/planejador";
 import { carregarRegras, carregarRestaurante, obterResumoOcupacao } from "@/lib/dados";
 import { NOMES_DIA, formatarDataCurta, formatarHora, formatarMoeda, horaDoTime, horasDeFuncionamento, type Restaurante } from "@/lib/dominio";
@@ -19,6 +20,7 @@ import { textoBeneficio } from "@/lib/campanha";
 import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
 import { janelaMaisVazia, type ResumoOcupacao } from "@/lib/ocupacao";
+import { META_RECUPERACAO } from "@/lib/diagnostico";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +28,19 @@ const OCUPACAO_MIN_PADRAO = 50;
 const fmt = new Intl.NumberFormat("pt-BR");
 const fmtData = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
 
-export default async function Dono({ searchParams }: { searchParams: Promise<{ regras?: string }> }) {
-  const abrirRegras = (await searchParams).regras === "1";
+const ABAS = [
+  { id: "hoje", rotulo: "Hoje" },
+  { id: "campanhas", rotulo: "Campanhas" },
+  { id: "configurar", rotulo: "Configurar" },
+  { id: "demo", rotulo: "Demo" },
+] as const;
+type Aba = (typeof ABAS)[number]["id"];
+
+type Busca = { aba?: string; regras?: string; dia?: string; inicio?: string; fim?: string };
+
+export default async function Dono({ searchParams }: { searchParams: Promise<Busca> }) {
+  const q = await searchParams;
+  const aba: Aba = ABAS.some((a) => a.id === q.aba) ? (q.aba as Aba) : "hoje";
   let resumo: ResumoOcupacao | null = null;
   let limite = OCUPACAO_MIN_PADRAO;
   let painel: Awaited<ReturnType<typeof carregarPainel>> | null = null;
@@ -39,7 +52,17 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
 
   try {
     const restaurante = await carregarRestaurante();
-    const janela = { dia: 2, inicio: 18, fim: 23 }; // terça à noite: a janela mais vazia da demo
+    const horas = horasDeFuncionamento(restaurante);
+    const fecha = horaDoTime(restaurante.fecha);
+    // Janela do formulário: a que veio da grade (?dia=&inicio=&fim=) ou terça à noite.
+    const pedida = { dia: Number(q.dia), inicio: Number(q.inicio), fim: Number(q.fim) };
+    const valida =
+      restaurante.dias_abertos.includes(pedida.dia) &&
+      horas.includes(pedida.inicio) &&
+      Number.isInteger(pedida.fim) &&
+      pedida.fim > pedida.inicio &&
+      pedida.fim <= fecha;
+    const janela = valida ? pedida : { dia: 2, inicio: 18, fim: 23 };
     const [r, regras, p, ctx, planos] = await Promise.all([
       obterResumoOcupacao(undefined, restaurante),
       carregarRegras(),
@@ -53,16 +76,13 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
     regrasInfo = regras;
     limite = regras.ocupacao_min;
     painel = p;
-    form = {
-      dias: r.dias,
-      horas: horasDeFuncionamento(restaurante),
-      fecha: horaDoTime(restaurante.fecha),
-      janela,
-      ctx,
-    };
+    form = { dias: r.dias, horas, fecha, janela, ctx };
   } catch (e) {
     falha = descreverErro(e).mensagem;
   }
+
+  const temDados = !!resumo && resumo.celulas.length > 0;
+  const contagem: Partial<Record<Aba, number>> = { campanhas: painel?.campanhas.length };
 
   return (
     <>
@@ -85,6 +105,16 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
             <BotaoResetar />
           </nav>
         </div>
+        <div className="abas-faixa">
+          <nav className="abas" aria-label="Seções do painel">
+            {ABAS.map((a) => (
+              <Link key={a.id} href={`/dono?aba=${a.id}`} aria-current={aba === a.id ? "page" : undefined} className="aba">
+                {a.rotulo}
+                {contagem[a.id] ? <span className="aba-qtd">{contagem[a.id]}</span> : null}
+              </Link>
+            ))}
+          </nav>
+        </div>
       </header>
 
       <main className="pagina">
@@ -98,44 +128,54 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
           <p className="aviso">Ainda não há histórico de ocupação. Clique em “Resetar demo”.</p>
         )}
 
-        {resumo && resumo.celulas.length > 0 && painel && form?.ctx && regrasInfo && (
-          <Indicadores
-            resumo={resumo}
-            painel={painel.campanhas}
-            ctx={form.ctx}
-            regras={regrasInfo}
-            recuperadas={painel.cadeirasRecuperadas30d}
-          />
+        {aba === "hoje" && temDados && painel && form?.ctx && regrasInfo && (
+          <>
+            <Destaque
+              resumo={resumo!}
+              painel={painel.campanhas}
+              ctx={form.ctx}
+              regras={regrasInfo}
+              recuperadas={painel.cadeirasRecuperadas30d}
+            />
+            <section className="cartao-painel" aria-labelledby="t-plan">
+              <Planejador inicial={planejamentos.find((x) => x.status === "proposta") ?? null} />
+            </section>
+            <section className="cartao-painel" aria-labelledby="t-ocup">
+              <Grade resumo={resumo!} limite={limite} />
+            </section>
+          </>
         )}
 
-        {resumo && resumo.celulas.length > 0 && (
-          <section className="cartao-painel" aria-labelledby="t-plan">
-            <Planejador inicial={planejamentos.find((x) => x.status === "proposta") ?? null} />
-          </section>
+        {aba === "campanhas" && painel && (
+          <>
+            {painel.campanhas.length > 0 && <BlocoKits campanhas={painel.campanhas} />}
+            <section className="cartao-painel" aria-labelledby="t-res">
+              <h2 id="t-res">Resultado das campanhas</h2>
+              <Resultados campanhas={painel.campanhas} />
+            </section>
+          </>
         )}
 
-        {painel && painel.campanhas.length > 0 && <BlocoKits campanhas={painel.campanhas} />}
-
-        {resumo && resumo.celulas.length > 0 && (
+        {aba === "configurar" && temDados && form && (
           <div className="duas-colunas">
-            <section className="cartao-painel ocupacao" aria-labelledby="t-ocup">
-              <Grade resumo={resumo} limite={limite} />
+            <section className="cartao-painel ocupacao" aria-labelledby="t-camp" id="nova">
+              <h2 id="t-camp">Nova campanha manual</h2>
+              <p className="legenda" style={{ marginBottom: 16 }}>
+                Sem restrição de cardápio: serve para quem quer uma campanha fora das janelas que o planejador propõe.
+                Dica: clique numa célula da grade, na aba Hoje, para começar por ela.
+              </p>
+              <FormCampanha
+                key={`${form.janela.dia}-${form.janela.inicio}-${form.janela.fim}`}
+                dias={form.dias}
+                horas={form.horas}
+                fecha={form.fecha}
+                janelaInicial={form.janela}
+                contextoInicial={form.ctx}
+              />
             </section>
             <div className="coluna-direita">
-              {form && (
-                <section className="cartao-painel" aria-labelledby="t-camp">
-                  <h2 id="t-camp">Nova campanha manual</h2>
-                  <FormCampanha
-                    dias={form.dias}
-                    horas={form.horas}
-                    fecha={form.fecha}
-                    janelaInicial={form.janela}
-                    contextoInicial={form.ctx}
-                  />
-                </section>
-              )}
               {regrasInfo && (
-                <details className="cartao-painel recolhivel-cartao" id="regras" open={abrirRegras}>
+                <details className="cartao-painel recolhivel-cartao" id="regras" open>
                   <summary>
                     <h2>Regras</h2>
                     <span className="legenda">
@@ -149,22 +189,22 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
           </div>
         )}
 
-        {painel && (
-          <section className="cartao-painel" aria-labelledby="t-res">
-            <h2 id="t-res">Resultado das campanhas</h2>
-            <Resultados campanhas={painel.campanhas} />
-          </section>
+        {aba === "demo" && (
+          <>
+            {painel && <TelefonesTeste telefones={painel.telefonesTeste} jaResgataram={painel.jaResgataram} />}
+            {planejamentos.length > 0 && <RegistroPlanejador planos={planejamentos} />}
+          </>
         )}
-
-        {planejamentos.length > 0 && <RegistroPlanejador planos={planejamentos} />}
-
-        {painel && <TelefonesTeste telefones={painel.telefonesTeste} jaResgataram={painel.jaResgataram} />}
       </main>
     </>
   );
 }
 
-function Indicadores({
+/**
+ * O número que o produto promete em destaque: cadeiras-hora recuperadas, com uma meta
+ * de referência (5% das vazias, a mesma do diagnóstico). Os outros indicadores ficam menores.
+ */
+function Destaque({
   resumo,
   painel,
   ctx,
@@ -180,49 +220,71 @@ function Indicadores({
   const pior = janelaMaisVazia(resumo);
   const resgates = painel.reduce((s, c) => s + c.resultado.resgatados, 0);
   const incrementais = painel.reduce((s, c) => s + c.resultado.resgatesIncrementais, 0);
-  const custo = painel.reduce((s, c) => s + c.resultado.custoDescontos, 0);
   const restante = Math.max(0, ctx.tetoRestanteMes);
   const usado = regras.teto_mes > 0 ? Math.min(100, ((regras.teto_mes - restante) / regras.teto_mes) * 100) : 0;
+  const meta = Math.max(1, Math.round(resumo.cadeirasHoraVazias30d * META_RECUPERACAO));
+  const progresso = Math.min(100, (recuperadas / meta) * 100);
+  const entregues = painel.filter((c) => c.kit?.entregue_em).length;
   return (
-    <section className="kpis" aria-label="Resumo">
-      <div className="kpi">
-        <span className="kpi-rotulo">Cadeiras-hora vazias · 30 dias</span>
-        <span className="kpi-valor destaque">{fmt.format(resumo.cadeirasHoraVazias30d)}</span>
-        <span className="kpi-nota">só nas horas em que o salão está aberto</span>
-      </div>
-      {pior && (
-        <div className="kpi">
-          <span className="kpi-rotulo">Janela mais vazia</span>
-          <span className="kpi-valor">
-            {NOMES_DIA[pior.dia]} {pior.inicio}h–{pior.fim}h
+    <section className="destaque" aria-label="Resumo">
+      <div className="destaque-principal">
+        <span className="kpi-rotulo">
+          Cadeiras-hora recuperadas · 30 dias{" "}
+          <Info texto="Pessoas trazidas por resgates incrementais (clientes que não vinham nessa janela) multiplicadas por 1h30 de permanência média." />
+        </span>
+        <div className="destaque-numeros">
+          <span className="destaque-valor">{fmt.format(recuperadas)}</span>
+          <span className="destaque-de">
+            de {fmt.format(resumo.cadeirasHoraVazias30d)} vazias no período
           </span>
-          <span className="kpi-nota">{fmt.format(Math.round(pior.percentual))}% de ocupação média em 60 dias</span>
         </div>
-      )}
-      <div className="kpi">
-        <span className="kpi-rotulo">Teto de descontos · {ctx.mes.split("-").reverse().join("/")}</span>
-        <span className="kpi-valor">{formatarMoeda(restante).replace(",00", "")}</span>
-        <div className="kpi-barra" aria-hidden="true">
-          <span style={{ width: `${usado}%` }} />
+        <div className="destaque-barra" role="img" aria-label={`${Math.round(progresso)}% da meta de ${fmt.format(meta)}`}>
+          <span style={{ width: `${Math.max(progresso, recuperadas > 0 ? 2 : 0)}%` }} />
         </div>
-        <span className="kpi-nota">restantes de {formatarMoeda(regras.teto_mes).replace(",00", "")}</span>
-        <a className="kpi-acao" href="?regras=1#regras">
-          Alterar teto do mês
-        </a>
-      </div>
-      <div className="kpi">
-        <span className="kpi-rotulo">Cadeiras-hora recuperadas · 30 dias</span>
-        <span className={`kpi-valor ${recuperadas > 0 ? "verde" : ""}`}>{fmt.format(recuperadas)}</span>
         <span className="kpi-nota">
-          de {fmt.format(resumo.cadeirasHoraVazias30d)} vazias · pessoas trazidas por resgate incremental × 1h30
+          {Math.round(progresso)}% da meta de referência: recuperar {Math.round(META_RECUPERACAO * 100)}% das vazias ({fmt.format(meta)} cadeiras-hora)
         </span>
       </div>
-      <div className="kpi">
-        <span className="kpi-rotulo">Resgates</span>
-        <span className="kpi-valor">{resgates}</span>
-        <span className="kpi-nota">
-          <span className="verde">{incrementais} {incrementais === 1 ? "incremental" : "incrementais"}</span> · {formatarMoeda(custo)} em descontos
-        </span>
+      <div className="destaque-secundarios">
+        {pior && (
+          <div className="mini-kpi">
+            <span>Janela mais vazia</span>
+            <b>
+              {NOMES_DIA[pior.dia]} {pior.inicio}h–{pior.fim}h
+            </b>
+            <small>{fmt.format(Math.round(pior.percentual))}% de ocupação</small>
+          </div>
+        )}
+        <div className="mini-kpi">
+          <span>Teto de descontos · {ctx.mes.split("-").reverse().join("/")}</span>
+          <b>{formatarMoeda(restante).replace(",00", "")}</b>
+          <div className="kpi-barra" aria-hidden="true">
+            <span style={{ width: `${usado}%` }} />
+          </div>
+          <small>
+            restantes de {formatarMoeda(regras.teto_mes).replace(",00", "")} ·{" "}
+            <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
+          </small>
+        </div>
+        <div className="mini-kpi">
+          <span>Resgates</span>
+          <b>{resgates}</b>
+          <small>
+            <span className="verde">{incrementais} de clientes novos</span>
+          </small>
+        </div>
+        <div className="mini-kpi">
+          <span>
+            Kit entregue à equipe{" "}
+            <Info texto="Campanhas em que o dono copiou a mensagem para a equipe. É a proxy do restaurante que divulga no salão." />
+          </span>
+          <b>
+            {entregues} de {painel.length}
+          </b>
+          <small>
+            <Link href="/dono?aba=campanhas">ver kits</Link>
+          </small>
+        </div>
       </div>
     </section>
   );
@@ -232,150 +294,190 @@ function descricaoCampanha(c: CampanhaPainel["campanha"]) {
   return `${NOMES_DIA[c.dia_semana]} ${formatarHora(c.hora_inicio)}–${formatarHora(c.hora_fim)}`;
 }
 
+const pctFmt = (v: number) => `${fmt.format(Math.round(v * 10) / 10)}%`;
+
+/** Uma campanha por cartão: funil, efeito contra o controle e custo por cliente novo em destaque. */
 function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
   if (campanhas.length === 0) {
-    return <p className="legenda">Nenhuma campanha ainda. Crie uma acima.</p>;
+    return <p className="legenda">Nenhuma campanha ainda. Gere uma proposta na aba Hoje.</p>;
   }
-  const moeda = (v: number | null) => (v === null ? "—" : formatarMoeda(v));
   return (
-    <>
-      <div className="rolagem">
-        <table className="tabela">
-          <thead>
-            <tr>
-              <th scope="col">Campanha</th>
-              <th scope="col">Emitidos</th>
-              <th scope="col">Resgatados</th>
-              <th scope="col">Soma das contas</th>
-              <th scope="col">Incrementais</th>
-              <th scope="col">Canibalizados</th>
-              <th scope="col">Custo em descontos</th>
-              <th scope="col">Custo por cliente incremental</th>
-              <th scope="col">Efeito vs controle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {campanhas.map(({ campanha: c, resultado: r, controle: k, ativa }) => {
-              const alerta = canibalizadoEmAlerta(r);
-              return (
-                <tr key={c.id}>
-                  <th scope="row">
-                    <b>{descricaoCampanha(c)}</b> <span className="legenda">{formatarDataCurta(c.data_janela)}</span>
-                    <span className="sub">
-                      {rotuloSegmento(c.segmento)} · {textoBeneficio(c.tipo, c.valor)} · teto {formatarMoeda(c.teto)}
-                      {c.semanas > 1 && ` · ${c.semanas} semanas`}
-                    </span>
-                    {c.status === "pausada" && (
-                      <span className="sub pausa">
-                        <span className="selo selo-demo">pausada</span> {c.motivo_pausa}
-                      </span>
-                    )}
-                    {ativa && (
-                      <span className="sub">
-                        <BotaoSimularCheia campanhaId={c.id} />
-                      </span>
-                    )}
-                  </th>
-                  <td>{r.emitidos}</td>
-                  <td>
-                    {r.resgatados}
-                    {r.taxaResgate !== null && <span className="sub">{fmt.format(r.taxaResgate)}% dos emitidos</span>}
-                  </td>
-                  <td>{moeda(r.somaContas)}</td>
-                  <td>
-                    <span className={r.resgatesIncrementais > 0 ? "verde" : undefined}>{r.resgatesIncrementais}</span>
-                    {r.percentualIncremental !== null && (
-                      <span className="sub">{fmt.format(r.percentualIncremental)}% dos resgates</span>
-                    )}
-                    <span className="sub">receita {moeda(r.receitaIncremental)}</span>
-                  </td>
-                  <td className={alerta ? "alerta-canibal" : undefined}>
-                    {r.resgatesCanibalizados}
-                    <span className="sub">custo {moeda(r.custoCanibalizado)}</span>
-                    {alerta && <span className="sub">acima de 40% do custo</span>}
-                  </td>
-                  <td>{moeda(r.custoDescontos)}</td>
-                  <td>
-                    <b>{moeda(r.custoPorIncremental)}</b>
-                  </td>
-                  <td>
-                    {k.estado === "sem_controle" && <span className="legenda">sem controle</span>}
-                    {k.estado === "aguardando" && (
-                      <>
-                        <span className="legenda">aguardando a janela</span>
-                        <span className="sub">{k.tamanhoControle} no controle</span>
-                      </>
-                    )}
-                    {k.estado === "medido" && (
-                      <>
-                        <b className={k.lift > 2 ? "verde" : k.lift < -2 ? "alerta-texto" : undefined}>
-                          {k.lift > 0 ? "+" : ""}
-                          {fmt.format(k.lift)} pts
-                        </b>
-                        <span className="sub">
-                          {fmt.format(k.taxaTratados)}% × {fmt.format(k.taxaControle)}% vieram
-                        </span>
-                        <span className="sub">
-                          {k.visitasAMais > 0 ? `${k.visitasAMais} visitas causadas` : "sem efeito: viriam igual"}
-                        </span>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="premissa">
-        Incremental = cliente sem visita naquela janela nos últimos 60 dias.
-        <br />
-        Receita incremental = contas dos resgates incrementais, já descontado o benefício. Custo por cliente incremental =
-        todo o custo em descontos da campanha dividido pelos resgates incrementais.
-        <br />
-        Canibalizado = desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de
-        escolher janela e público, em vez de anunciar desconto para todo mundo.
-        <br />
-        Efeito vs controle = % de quem recebeu o benefício que veio na janela menos % do grupo sorteado para não
-        receber que veio mesmo assim. É a medida do efeito real; o incremental do resgate é uma aproximação.
-      </p>
-
-      {campanhas.map(({ campanha: c, beneficios }) => (
-        <details key={c.id} className="recolhivel">
-          <summary>
-            Benefícios emitidos · {descricaoCampanha(c)} · {formatarDataCurta(c.data_janela)}
-            <span className="qtd">{beneficios.length}</span>
-          </summary>
-          <div className="rolagem">
-            <table className="tabela compacta">
-              <thead>
-                <tr>
-                  <th scope="col">Cliente</th>
-                  <th scope="col">Telefone</th>
-                  <th scope="col">Código</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Incremental</th>
-                </tr>
-              </thead>
-              <tbody>
-                {beneficios.map((b, i) => (
-                  <tr key={i}>
-                    <td>{b.nome}</td>
-                    <td className="mono">{b.telefone}</td>
-                    <td className="mono">{b.codigo}</td>
-                    <td>
-                      <span className={`selo selo-${b.status}`}>{b.status}</span>
-                      {b.desconto !== null && <span className="sub">desconto {formatarMoeda(b.desconto)}</span>}
-                    </td>
-                    <td>{b.incremental === null ? "" : b.incremental ? <span className="verde">sim</span> : "não"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+    <div className="campanhas">
+      {campanhas.map((cp) => (
+        <CartaoCampanha key={cp.campanha.id} cp={cp} />
       ))}
-    </>
+    </div>
+  );
+}
+
+function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
+  const { campanha: c, resultado: r, controle: k, ativa, beneficios } = cp;
+  const alerta = canibalizadoEmAlerta(r);
+  const base = Math.max(1, r.emitidos);
+  const largura = (n: number) => `${n > 0 ? Math.max(2, (n / base) * 100) : 0}%`;
+  const status = c.status === "pausada" ? "pausada" : ativa ? "ativa" : "encerrada";
+  return (
+    <article className={`campanha campanha-${status}`}>
+      <header className="campanha-cabeca">
+        <div>
+          <h3>
+            {descricaoCampanha(c)} <span className="legenda">{formatarDataCurta(c.data_janela)}</span>
+            {c.semanas > 1 && <span className="legenda"> · {c.semanas} semanas</span>}
+          </h3>
+          <p className="legenda">
+            {rotuloSegmento(c.segmento)} · {textoBeneficio(c.tipo, c.valor)} · teto {formatarMoeda(c.teto)}
+          </p>
+        </div>
+        <span className={`selo ${status === "ativa" ? "selo-resgatado" : status === "pausada" ? "selo-demo" : ""}`}>{status}</span>
+      </header>
+      {c.status === "pausada" && c.motivo_pausa && <p className="campanha-pausa">{c.motivo_pausa}</p>}
+
+      <div className="campanha-corpo">
+        <div className="campanha-bloco">
+          <span className="bloco-titulo">Funil</span>
+          <div className="funil">
+            <div>
+              <span>Emitidos</span>
+              <i style={{ width: largura(r.emitidos) }} />
+              <b>{r.emitidos}</b>
+            </div>
+            <div>
+              <span>Resgatados</span>
+              <i style={{ width: largura(r.resgatados) }} />
+              <b>
+                {r.resgatados}
+                {r.taxaResgate !== null && r.resgatados > 0 && <small> {pctFmt(r.taxaResgate)}</small>}
+              </b>
+            </div>
+            <div>
+              <span>
+                Clientes novos{" "}
+                <Info texto="Resgates incrementais: o cliente não tinha visita naquela janela nos últimos 60 dias." />
+              </span>
+              <i className="funil-verde" style={{ width: largura(r.resgatesIncrementais) }} />
+              <b className={r.resgatesIncrementais > 0 ? "verde" : undefined}>{r.resgatesIncrementais}</b>
+            </div>
+          </div>
+        </div>
+
+        <div className="campanha-bloco">
+          <span className="bloco-titulo">
+            Efeito vs controle{" "}
+            <Info texto="% de quem recebeu o benefício que veio na janela menos % do grupo sorteado para não receber que veio mesmo assim. É a medida do efeito real." />
+          </span>
+          {k.estado === "sem_controle" && <p className="legenda">Campanha sem grupo de controle (menos de 10 elegíveis).</p>}
+          {k.estado === "aguardando" && (
+            <p className="legenda">Aguardando a janela. {k.tamanhoControle} clientes sorteados no grupo de controle.</p>
+          )}
+          {k.estado === "medido" && (
+            <>
+              <div className="controle">
+                <div>
+                  <span>Receberam</span>
+                  <i style={{ width: `${Math.max(k.taxaTratados, 1)}%` }} />
+                  <b>{pctFmt(k.taxaTratados)}</b>
+                </div>
+                <div>
+                  <span>Controle</span>
+                  <i className="controle-cinza" style={{ width: `${Math.max(k.taxaControle, 1)}%` }} />
+                  <b>{pctFmt(k.taxaControle)}</b>
+                </div>
+              </div>
+              <p className={`efeito ${k.lift > 2 ? "verde" : k.lift < -2 ? "alerta-texto" : ""}`}>
+                <b>
+                  {k.lift > 0 ? "+" : ""}
+                  {fmt.format(k.lift)} pts
+                </b>{" "}
+                {k.visitasAMais > 0 ? `· ${k.visitasAMais} visitas causadas pela campanha` : "· viriam igual sem o desconto"}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="campanha-bloco campanha-chave">
+          <span className="bloco-titulo">
+            Custo por cliente novo{" "}
+            <Info texto="Todo o desconto dado na campanha dividido pelos resgates incrementais." />
+          </span>
+          <b
+            className={`chave-valor ${r.custoPorIncremental === null && r.resgatados > 0 ? "alerta-texto chave-texto" : ""}`}
+          >
+            {r.custoPorIncremental === null ? (r.resgatados > 0 ? "sem cliente novo" : "—") : formatarMoeda(r.custoPorIncremental)}
+          </b>
+          <span className="legenda">
+            {formatarMoeda(r.custoDescontos)} gastos de {formatarMoeda(c.teto)} de teto
+          </span>
+          {alerta && (
+            <span className="alerta-canibal-linha">
+              {formatarMoeda(r.custoCanibalizado)} canibalizados: desconto para quem já vinha
+            </span>
+          )}
+        </div>
+      </div>
+
+      {ativa && (
+        <div className="campanha-acoes">
+          <BotaoSimularCheia campanhaId={c.id} />
+        </div>
+      )}
+
+      <details className="recolhivel">
+        <summary>
+          Detalhes e benefícios emitidos <span className="qtd">{beneficios.length}</span>
+        </summary>
+        <dl className="campanha-detalhes">
+          <div>
+            <dt>Soma das contas</dt>
+            <dd>{formatarMoeda(r.somaContas)}</dd>
+          </div>
+          <div>
+            <dt>
+              Receita de clientes novos <Info texto="Contas dos resgates incrementais, já descontado o benefício." />
+            </dt>
+            <dd>{formatarMoeda(r.receitaIncremental)}</dd>
+          </div>
+          <div>
+            <dt>
+              Canibalizados <Info texto="Desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de escolher janela e público." />
+            </dt>
+            <dd className={alerta ? "alerta-texto" : undefined}>
+              {r.resgatesCanibalizados} · {formatarMoeda(r.custoCanibalizado)}
+            </dd>
+          </div>
+          <div>
+            <dt>Custo em descontos</dt>
+            <dd>{formatarMoeda(r.custoDescontos)}</dd>
+          </div>
+        </dl>
+        <div className="rolagem">
+          <table className="tabela compacta">
+            <thead>
+              <tr>
+                <th scope="col">Cliente</th>
+                <th scope="col">Telefone</th>
+                <th scope="col">Código</th>
+                <th scope="col">Status</th>
+                <th scope="col">Incremental</th>
+              </tr>
+            </thead>
+            <tbody>
+              {beneficios.map((b, i) => (
+                <tr key={i}>
+                  <td>{b.nome}</td>
+                  <td className="mono">{b.telefone}</td>
+                  <td className="mono">{b.codigo}</td>
+                  <td>
+                    <span className={`selo selo-${b.status}`}>{b.status}</span>
+                    {b.desconto !== null && <span className="sub">desconto {formatarMoeda(b.desconto)}</span>}
+                  </td>
+                  <td>{b.incremental === null ? "" : b.incremental ? <span className="verde">sim</span> : "não"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </article>
   );
 }
 
@@ -492,7 +594,7 @@ function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[
         </p>
         <h3 className="demo-sub">Com benefício ativo</h3>
         {telefones.length === 0 ? (
-          <p className="legenda">Nenhum benefício ativo agora. Crie uma campanha acima.</p>
+          <p className="legenda">Nenhum benefício ativo agora. Crie uma campanha na aba Hoje.</p>
         ) : (
           <ul className="lista-telefones">
             {telefones.map((t) => (
@@ -535,6 +637,21 @@ function classeCelula(p: number, limite: number): string {
   return p < 70 ? "c-n1" : p < 90 ? "c-n2" : "c-n3";
 }
 
+/**
+ * Janela sugerida ao clicar numa célula: a sequência de horas vizinhas abaixo do
+ * mínimo, dentro do mesmo turno; numa célula acima do mínimo, só aquela hora.
+ */
+function janelaDaCelula(resumo: ResumoOcupacao, limite: number, dia: number, hora: number) {
+  const pct = new Map(resumo.celulas.map((c) => [`${c.dia}-${c.hora}`, c.percentual]));
+  const vazia = (h: number) => resumo.horas.includes(h) && (pct.get(`${dia}-${h}`) ?? 100) < limite;
+  if (!vazia(hora)) return { inicio: hora, fim: hora + 1 };
+  let inicio = hora;
+  let fim = hora + 1;
+  while (vazia(inicio - 1)) inicio--;
+  while (vazia(fim)) fim++;
+  return { inicio, fim };
+}
+
 function Grade({ resumo, limite }: { resumo: ResumoOcupacao; limite: number }) {
   const celula = new Map(resumo.celulas.map((c) => [`${c.dia}-${c.hora}`, c]));
   return (
@@ -542,11 +659,12 @@ function Grade({ resumo, limite }: { resumo: ResumoOcupacao; limite: number }) {
       <div className="cabecalho-cartao">
         <h2 id="t-ocup">Ocupação média por hora</h2>
         <span className="legenda">
-          % das {resumo.restaurante.capacidade} cadeiras · {fmtData(resumo.periodo.de)} a {fmtData(resumo.periodo.ate)}
+          % das {resumo.restaurante.capacidade} cadeiras · {fmtData(resumo.periodo.de)} a {fmtData(resumo.periodo.ate)} ·
+          clique numa célula para criar campanha nela
         </span>
       </div>
       <div className="rolagem">
-        <table className="grade">
+        <table className="grade grade-clicavel">
           <thead>
             <tr>
               <th />
@@ -571,13 +689,16 @@ function Grade({ resumo, limite }: { resumo: ResumoOcupacao; limite: number }) {
                   {resumo.dias.map((d) => {
                     const c = celula.get(`${d}-${h}`);
                     if (!c) return <td key={d} className="c-n1">–</td>;
+                    const j = janelaDaCelula(resumo, limite, d, h);
                     return (
-                      <td
-                        key={d}
-                        className={classeCelula(c.percentual, limite)}
-                        title={`${NOMES_DIA[d]} ${h}h–${h + 1}h: média de ${c.amostras} dias`}
-                      >
-                        {fmt.format(Math.round(c.percentual))}%
+                      <td key={d} className={classeCelula(c.percentual, limite)}>
+                        <Link
+                          href={`/dono?aba=configurar&dia=${d}&inicio=${j.inicio}&fim=${j.fim}#nova`}
+                          title={`${NOMES_DIA[d]} ${h}h–${h + 1}h: média de ${c.amostras} dias. Criar campanha ${j.inicio}h–${j.fim}h.`}
+                          aria-label={`${NOMES_DIA[d]} ${h}h, ${Math.round(c.percentual)}% de ocupação. Criar campanha de ${j.inicio}h a ${j.fim}h.`}
+                        >
+                          {fmt.format(Math.round(c.percentual))}%
+                        </Link>
                       </td>
                     );
                   })}

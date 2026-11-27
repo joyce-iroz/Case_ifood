@@ -89,7 +89,10 @@ npm run check:seed   # imprime a grade gerada pelo seed, sem banco
 ```
 app/
   page.tsx               seletor de papel
-  dono/page.tsx          grade de ocupação (server component)
+  dono/page.tsx          painel do dono em abas (?aba=hoje|campanhas|configurar|demo):
+                         Hoje = destaque + planejador + grade clicável; Campanhas = kits +
+                         cartões de resultado; Configurar = campanha manual + regras
+                         (?dia=&inicio=&fim= vem do clique na grade); Demo = telefones + registro
   salao/page.tsx         teclado do salão
   api/reset/route.ts     POST: apaga tudo e popula de novo
   api/ocupacao/route.ts  GET: médias por dia da semana × hora
@@ -112,6 +115,7 @@ app/
 components/
   BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx,
   KitAtivacao.tsx, BotaoSimularCheia.tsx, Diagnostico.tsx   componentes de cliente
+  Info.tsx               ícone "i" com explicação (sem estado)
   Projecao.tsx           quadro de retorno esperado (sem estado)
   Tentativas.tsx         lista de tentativas do modelo (sem estado)
   Marca.tsx              logo (server)
@@ -268,6 +272,12 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   (`chaveCombo`) de uma delas é descartada com o motivo. A regra fixa também
   pula as já mostradas e deixa `frequenta_janela` por último (só canibaliza).
   Passadas 3 gerações, as combinações podem voltar.
+  **Justificativa específica.** O cardápio leva `segmentos_fatos` (taxa de
+  resgate e fonte, efeito medido contra controle, observação; para a região,
+  pedidos médios e distância). `conferirJustificativa` reprova texto com menos
+  de 2 números, número que não está na entrada (tolerância de 0,5) ou código de
+  segmento no lugar do nome. Cada alternativa ganha `fatos` e `projecao`
+  calculados em código, mostrados no cartão acima do texto do modelo.
   O modelo só é chamado no POST de "Gerar proposta", nunca ao carregar página.
   Sem chave, a tentativa registra o erro e vai direto à regra fixa
   (`provedorConfigurado` em lib/llm.ts decide provedor e variável).
@@ -335,6 +345,15 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   ,5 para meia hora (18.5 = 18h30); `timeDaHora`/`horaDoTime`/`formatarHora`
   convertem. Uma visita registrada na hora cheia h conta para a janela se a
   hora h–h+1 encosta nela.
+- **Painel do dono (visual).** Número principal = cadeiras-hora recuperadas
+  com barra até a meta de referência (5% das vazias, `META_RECUPERACAO`).
+  Resultado de campanha em cartões: funil (emitidos → resgatados → clientes
+  novos), barras recebeu × controle com o lift, custo por cliente novo em
+  destaque; o resto em "Detalhes". Definições em ícones `Info` (tooltip por
+  hover/foco), não em rodapé. Clicar numa célula da grade abre Configurar com a
+  janela preenchida (`janelaDaCelula`: horas vizinhas abaixo do mínimo no mesmo
+  turno). No planejador, a alternativa de menor custo projetado por cliente
+  novo ganha o selo "melhor retorno".
 - Identificadores de domínio em português, sem acento no código
   (`ocupacao`, `beneficio`); texto de interface em português com acento.
 - Schema mudou? Atualize `supabase/schema.sql` (ele derruba e recria tudo) e a

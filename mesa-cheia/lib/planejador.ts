@@ -20,6 +20,7 @@ import {
   chaveCombo,
   paraContrato,
   type Cardapio,
+  type FatoSegmento,
   type SaidaModelo,
 } from "./planejador-regras";
 import { lerProposta, textoBeneficio, type Bloqueio, type PropostaCampanha } from "./campanha";
@@ -40,7 +41,13 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
 - tipo: "desconto_percentual" ou "desconto_valor". valor: um número da lista correspondente em valores_permitidos. Não use um tipo cuja lista esteja vazia.
 - custo_maximo: um número da lista custos_maximos_permitidos dessa janela.
 - semanas: um número de semanas_permitidas (por quantas semanas a janela se repete). Use 1 se não houver motivo para repetir.
-- justificativa: duas ou três frases em português do Brasil, citando a ocupação média da janela e por que esse segmento. Use só números que aparecem na entrada.
+- justificativa: duas ou três frases em português do Brasil, específicas desta alternativa:
+  1. o problema da janela, com números: ocupação média e cadeiras-hora vazias;
+  2. por que este segmento, com um fato de "segmentos_fatos": taxa de resgate, efeito medido contra o controle ou a observação;
+  3. o que esta alternativa ganha ou perde em relação às outras duas (a aposta).
+  Cite pelo menos 2 números, todos copiados da entrada. Número que não está na entrada reprova a alternativa.
+  Chame o segmento pelo nome em "descricao", nunca pelo código (ex.: "pede delivery e nunca veio ao salão", não "delivery_nunca_veio").
+  Não escreva frases que serviriam para qualquer restaurante, como "pode atrair novos clientes" sem dizer quantos nem por quê.
 
 Clientes do segmento frequenta_janela já vêm nesse horário; um benefício para eles quase nunca traz cliente a mais.
 Se a entrada tiver "propostas_ja_mostradas", o dono já viu essas combinações e pediu outras: nenhuma das 3 pode repetir a mesma janela com o mesmo segmento de uma delas.
@@ -62,6 +69,8 @@ export type Alternativa = {
   custoMaximo: number;
   justificativa: string;
   notas: string[];
+  fatos?: string;          // calculados em código, mostrados acima da justificativa
+  projecao?: Projecao;     // retorno esperado, mesma conta da prévia
 };
 
 export type PlanejamentoView = {
@@ -81,6 +90,32 @@ export type PlanejamentoView = {
 };
 
 /** Janelas candidatas da base, com saldo do mês e elegíveis por segmento de cada uma. */
+/** O que se sabe de cada segmento, em código, para o modelo citar e o cartão mostrar. */
+function fatosDosSegmentos(base: Base): Record<Segmento, FatoSegmento> {
+  return Object.fromEntries(
+    SEGMENTOS.map((s) => {
+      const t = base.taxas[s.id];
+      const e = base.efeitos[s.id];
+      const r = base.fatosRegiao;
+      return [
+        s.id,
+        {
+          descricao: s.rotulo,
+          taxa_resgate_pct: Math.round(t.resgate * 1000) / 10,
+          fonte_taxa: t.base,
+          efeito_medido_vs_controle_pts: e?.pts ?? null,
+          observacao:
+            s.id === "cozinha_similar" && r
+              ? `pedem ${base.restaurante.cozinha} em outros restaurantes em média ${r.pedidosMedios} vezes em 60 dias, a ${r.distanciaMedia} km daqui, e nunca vieram`
+              : s.id === "frequenta_janela"
+                ? "já vêm nesse horário: desconto para eles costuma ser canibalizado"
+                : null,
+        },
+      ];
+    }),
+  ) as Record<Segmento, FatoSegmento>;
+}
+
 function cardapioDaBase(base: Base): Cardapio {
   const candidatas = calcularCandidatas(base.resumo, base.restaurante, base.regras.ocupacao_min);
   const janelas = candidatas.slice(0, JANELAS_NO_CARDAPIO).map((c) => {
@@ -95,14 +130,36 @@ function cardapioDaBase(base: Base): Cardapio {
       validade: formatarJanela(ctx.proxima.data, c.inicio, c.fim),
     };
   });
-  return montarCardapio(base.restaurante, base.regras, janelas);
+  return montarCardapio(base.restaurante, base.regras, janelas, fatosDosSegmentos(base));
 }
 
-function apresentar(saida: SaidaModelo, proposta: PropostaCampanha, cardapio: Cardapio, notas: string[]): Alternativa {
+function apresentar(
+  saida: SaidaModelo,
+  proposta: PropostaCampanha,
+  cardapio: Cardapio,
+  notas: string[],
+  base: Base,
+): Alternativa {
   const j = cardapio.janelas_candidatas.find(
     (x) => x.dia_semana === saida.dia_semana && x.hora_inicio === saida.hora_inicio && x.hora_fim === saida.hora_fim,
   )!;
+  const elegiveis = j.segmentos[proposta.segmento].elegiveis;
+  const f = cardapio.segmentos_fatos?.[proposta.segmento];
+  const n = (v: number) => String(v).replace(".", ",");
+  const fatos = [
+    `${n(Math.round(j.ocupacao_media_pct))}% ocupada`,
+    `${n(Math.round(j.cadeiras_hora_vazias))} cadeiras-hora vazias por semana`,
+    `${elegiveis} elegíveis`,
+    f && `${n(f.taxa_resgate_pct)}% resgatam (${f.fonte_taxa === "historico" ? "histórico" : "padrão, sem histórico"})`,
+    f?.efeito_medido_vs_controle_pts != null &&
+      `${f.efeito_medido_vs_controle_pts > 0 ? "+" : ""}${n(f.efeito_medido_vs_controle_pts)} pts vs controle em campanhas anteriores`,
+    f?.observacao,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return {
+    fatos,
+    projecao: projetarPara(proposta, elegiveis, base).projecao,
     aposta: saida.aposta,
     proposta,
     janela: `${NOMES_DIA[proposta.dia_semana]} ${formatarHora(proposta.hora_inicio)}–${formatarHora(proposta.hora_fim)}`,
@@ -164,7 +221,7 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
           }
           // Passou no cardápio; ainda passa por todas as regras de campanha.
           const av = avaliarProposta(alt.proposta, base);
-          if (av.ok) alternativas.push(apresentar(alt.saida, alt.proposta, cardapio, []));
+          if (av.ok) alternativas.push(apresentar(alt.saida, alt.proposta, cardapio, [], base));
           else erros.push(...av.bloqueios.map((b) => `"${alt.saida.aposta}": ${b.mensagem}`));
         }
       } catch (e) {
@@ -183,7 +240,7 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
       const fb = propostaFallback(cardapio, jaMostradas);
       if (fb) {
         const av = avaliarProposta(fb.proposta, base);
-        if (av.ok) alternativas = [apresentar(fb.saida, fb.proposta, cardapio, fb.notas)];
+        if (av.ok) alternativas = [apresentar(fb.saida, fb.proposta, cardapio, fb.notas, base)];
         else motivo = `A regra fixa também foi bloqueada: ${av.bloqueios.map((b) => b.mensagem).join(" ")}`;
       } else {
         motivo = "A regra fixa não encontrou janela com clientes elegíveis e saldo no teto do mês.";

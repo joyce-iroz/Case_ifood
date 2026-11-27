@@ -77,17 +77,29 @@ export type Cardapio = {
   segmentos_descricao: Record<Segmento, string>;
   valores_permitidos: { desconto_percentual: number[]; desconto_valor: number[] };
   semanas_permitidas?: number[]; // ausente em cardápios antigos: vale 1 a 4
+  segmentos_fatos?: Record<Segmento, FatoSegmento>; // o que se sabe de cada segmento, para a justificativa
   janelas_candidatas: JanelaCardapio[];
 };
 
 export const semanasDoCardapio = (c: Cardapio) => c.semanas_permitidas ?? [1, 2, 3, 4];
 
+/** Fatos de um segmento que o modelo pode citar. Calculados em código. */
+export type FatoSegmento = {
+  descricao: string;
+  taxa_resgate_pct: number;
+  fonte_taxa: "historico" | "padrao";
+  efeito_medido_vs_controle_pts: number | null; // null = ainda sem campanha medida
+  observacao: string | null;
+};
+
 export function montarCardapio(
   r: Restaurante,
   regras: Regras,
   janelas: { candidata: JanelaCandidata; elegiveis: Record<Segmento, number>; saldo: number; validade: string }[],
+  fatos?: Record<Segmento, FatoSegmento>,
 ): Cardapio {
   return {
+    ...(fatos ? { segmentos_fatos: fatos } : {}),
     restaurante: { nome: r.nome, capacidade: r.capacidade, ticket_medio: r.ticket_medio },
     regras,
     segmentos_descricao: Object.fromEntries(SEGMENTOS.map((s) => [s.id, s.rotulo])) as Record<Segmento, string>,
@@ -181,8 +193,35 @@ export function validarContraCardapio(p: PropostaCampanha, cardapio: Cardapio): 
   return { erros, janela };
 }
 
+/** Todos os números que aparecem nos dados enviados ao modelo (inclusive dentro de "19:30"). */
+export function numerosDoCardapio(c: Cardapio): number[] {
+  return [...JSON.stringify(c).matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+}
+
+/**
+ * Justificativa específica: cita pelo menos 2 números, e todos existem na entrada
+ * (aceita arredondamento: 38 para 38,2). Número inventado reprova, como valor fora da regra.
+ */
+export function conferirJustificativa(just: string, numerosEntrada: number[]): string[] {
+  const codigo = SEGMENTOS.find((s) => just.includes(s.id));
+  if (codigo) return [`justificativa usa o código "${codigo.id}"; chame o segmento pelo nome: "${codigo.rotulo}"`];
+  const citados = [...just.matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => Number(m[0].replace(",", ".")));
+  if (citados.length < 2)
+    return [
+      "justificativa genérica: cite pelo menos 2 números da entrada (ocupação, cadeiras-hora vazias, elegíveis, taxa de resgate ou efeito medido do segmento)",
+    ];
+  const inventados = citados.filter((n) => !numerosEntrada.some((x) => Math.abs(x - n) <= 0.5));
+  return inventados.length
+    ? [`justificativa cita ${inventados.join(", ")}, que não está nos dados de entrada; use só números da entrada`]
+    : [];
+}
+
 /** Uma alternativa do modelo: formato do contrato, depois o cardápio. */
-function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: AlternativaValida } | { ok: false; erros: string[] } {
+function validarItem(
+  bruto: unknown,
+  cardapio: Cardapio,
+  numeros?: number[],
+): { ok: true; alt: AlternativaValida } | { ok: false; erros: string[] } {
   if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return { ok: false, erros: ["precisa ser um objeto JSON"] };
   const o = bruto as Record<string, unknown>;
   const chaves = ["aposta", "dia_semana", "hora_inicio", "hora_fim", "segmento", "tipo", "valor", "clientes_alvo", "custo_maximo", "justificativa"];
@@ -207,6 +246,7 @@ function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: Alter
   if (!Number.isFinite(custo)) erros.push("custo_maximo precisa ser número");
   const just = typeof o.justificativa === "string" ? o.justificativa.trim() : "";
   if (just.length < 20 || just.length > 700) erros.push("justificativa precisa ter de duas a três frases");
+  else if (numeros) erros.push(...conferirJustificativa(just, numeros));
   if (erros.length) return { ok: false, erros };
 
   const proposta: PropostaCampanha = {
@@ -275,8 +315,9 @@ export function validarAlternativas(texto: string, cardapio: Cardapio): { valida
   const erros: string[] = [];
   if (lista.length !== 3) erros.push(`vieram ${lista.length} propostas; o pedido é de exatamente 3`);
   const validas: AlternativaValida[] = [];
+  const numeros = numerosDoCardapio(cardapio);
   lista.slice(0, 3).forEach((item, i) => {
-    const v = validarItem(item, cardapio);
+    const v = validarItem(item, cardapio, numeros);
     if (!v.ok) return erros.push(...v.erros.map((e) => `proposta ${i + 1}: ${e}`));
     const repetida = validas.find(
       (x) => x.janela === v.alt.janela && x.proposta.segmento === v.alt.proposta.segmento,

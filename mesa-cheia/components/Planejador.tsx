@@ -195,6 +195,7 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
                 <CartaoAlternativa
                   key={i}
                   a={a}
+                  melhor={plano.alternativas.length > 1 && i === melhorRetorno(plano.alternativas)}
                   selecionada={sel === i || plano.alternativaAprovada === i}
                   aprovada={plano.alternativaAprovada === i}
                   podeSelecionar={aguardando}
@@ -248,30 +249,47 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
   );
 }
 
+/** Índice da alternativa com menor custo projetado por cliente novo (-1 se nenhuma traz cliente novo). */
+function melhorRetorno(alts: Alternativa[]): number {
+  let melhor = -1;
+  alts.forEach((a, i) => {
+    const c = a.projecao?.custoPorIncremental;
+    if (c == null || !a.projecao?.incrementais) return;
+    const atual = melhor >= 0 ? alts[melhor].projecao!.custoPorIncremental! : Infinity;
+    if (c < atual || (c === atual && a.projecao.incrementais > alts[melhor].projecao!.incrementais)) melhor = i;
+  });
+  return melhor;
+}
+
 function CartaoAlternativa({
   a,
+  melhor,
   selecionada,
   aprovada,
   podeSelecionar,
   aoSelecionar,
 }: {
   a: Alternativa;
+  melhor: boolean;
   selecionada: boolean;
   aprovada: boolean;
   podeSelecionar: boolean;
   aoSelecionar: () => void;
 }) {
   return (
-    <article className={`alternativa ${selecionada ? "selecionada" : ""}`}>
+    <article className={`alternativa ${selecionada ? "selecionada" : ""} ${melhor ? "melhor" : ""}`}>
       <div className="alternativa-cabeca">
         <span className="aposta">{a.aposta}</span>
+        {melhor && <span className="selo selo-resgatado">melhor retorno</span>}
         {aprovada && <span className="selo selo-resgatado">aprovada</span>}
       </div>
       <div>
         <p className="proposta-janela">{a.janela}</p>
-        <p className="legenda">
-          ocupação {num(a.ocupacao)}% · {num(a.cadeirasVazias)} cadeiras-hora vazias
-        </p>
+        {!a.fatos && (
+          <p className="legenda">
+            ocupação {num(a.ocupacao)}% · {num(a.cadeirasVazias)} cadeiras-hora vazias
+          </p>
+        )}
       </div>
       <dl className="proposta-dados">
         <div>
@@ -290,6 +308,25 @@ function CartaoAlternativa({
           <dd>{formatarMoeda(a.custoMaximo)}</dd>
         </div>
       </dl>
+      {a.projecao && (
+        <div className="alternativa-projecao" aria-label="Projeção">
+          <div>
+            <span>clientes novos</span>
+            <b className={a.projecao.incrementais > 0 ? "verde" : undefined}>{a.projecao.incrementais}</b>
+          </div>
+          <div>
+            <span>receita nova</span>
+            <b>{formatarMoeda(a.projecao.receitaIncremental)}</b>
+          </div>
+          <div>
+            <span>por cliente novo</span>
+            <b className={a.projecao.custoPorIncremental === null ? "alerta-texto" : undefined}>
+              {a.projecao.custoPorIncremental === null ? "—" : formatarMoeda(a.projecao.custoPorIncremental)}
+            </b>
+          </div>
+        </div>
+      )}
+      {a.fatos && <p className="fatos">{a.fatos}</p>}
       <p className="justificativa">{a.justificativa}</p>
       {a.notas.map((n, i) => (
         <p key={i} className="legenda">

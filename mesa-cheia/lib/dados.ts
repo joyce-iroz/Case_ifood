@@ -88,6 +88,8 @@ export type ClienteBase = {
   origem: Origem;
   telefone_hash: string;
   telefone_final: string;
+  pedidos_cozinha_regiao?: number;
+  distancia_km?: number | null;
 };
 
 /** Clientes do restaurante e o histórico de visitas de cada um. */
@@ -95,7 +97,7 @@ export async function carregarClientesComVisitas(id = RESTAURANTE_DEMO_ID) {
   const db = supabaseServidor();
   const [clientes, visitas] = await Promise.all([
     paginar<ClienteBase>((i, f) =>
-      db.from("clientes").select("id, nome, origem, telefone_hash, telefone_final").eq("restaurante_id", id).order("id").range(i, f),
+      db.from("clientes").select("id, nome, origem, telefone_hash, telefone_final, pedidos_cozinha_regiao, distancia_km").eq("restaurante_id", id).order("id").range(i, f),
     ),
     paginar<{ cliente_id: string; data: string; hora: number }>((i, f) =>
       db.from("visitas").select("cliente_id, data, hora").eq("restaurante_id", id).order("id").range(i, f),

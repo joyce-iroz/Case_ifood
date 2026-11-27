@@ -29,7 +29,7 @@ import {
 import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmento } from "./segmentos";
 import { gerarKit } from "./kit";
 import { calcularTaxas, type Taxas } from "./projecao";
-import { sortearControle } from "./controle";
+import { medirControle, sortearControle } from "./controle";
 import { janelaNatural } from "./kit-regras";
 import type { ResumoOcupacao } from "./ocupacao";
 
@@ -100,7 +100,38 @@ export async function carregarBase(id = RESTAURANTE_DEMO_ID) {
       })),
   );
 
-  return { id, hoje, restaurante, regras, resumo, clientes: base, campanhasComGasto, ultimaOferta, taxas };
+  // Efeito medido contra o grupo de controle, por segmento (média pesada pelos tratados).
+  const efeitoAcc = new Map<Segmento, { soma: number; peso: number; campanhas: number }>();
+  for (const c of campanhasCompletas.campanhas) {
+    const ctrl = campanhasCompletas.controles.filter((k) => k.campanha_id === c.id).map((k) => k.cliente_id);
+    if (!ctrl.length) continue;
+    const tratados = campanhasCompletas.beneficios.filter((b) => b.campanha_id === c.id).map((b) => b.cliente_id);
+    const m = medirControle(c, tratados, ctrl, base.visitasDe);
+    if (m.estado !== "medido") continue;
+    const acc = efeitoAcc.get(c.segmento) ?? { soma: 0, peso: 0, campanhas: 0 };
+    acc.soma += m.lift * tratados.length;
+    acc.peso += tratados.length;
+    acc.campanhas += 1;
+    efeitoAcc.set(c.segmento, acc);
+  }
+  const efeitos = Object.fromEntries(
+    SEGMENTOS.map((s) => {
+      const a = efeitoAcc.get(s.id);
+      return [s.id, a && a.peso ? { pts: Math.round((a.soma / a.peso) * 10) / 10, campanhas: a.campanhas } : null];
+    }),
+  ) as Record<Segmento, { pts: number; campanhas: number } | null>;
+
+  // Fatos dos clientes da região (dado da plataforma, só em agregado).
+  const regiao = base.clientes.filter((c) => c.origem === "regiao");
+  const media = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : 0);
+  const fatosRegiao = regiao.length
+    ? {
+        pedidosMedios: media(regiao.map((c) => Number(c.pedidos_cozinha_regiao ?? 0))),
+        distanciaMedia: media(regiao.map((c) => Number(c.distancia_km ?? 0))),
+      }
+    : null;
+
+  return { id, hoje, restaurante, regras, resumo, clientes: base, campanhasComGasto, ultimaOferta, taxas, efeitos, fatosRegiao };
 }
 
 export type Base = Awaited<ReturnType<typeof carregarBase>>;
