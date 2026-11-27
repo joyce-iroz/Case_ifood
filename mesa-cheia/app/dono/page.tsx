@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
-const VERSAO = "27/11 · vagas pela conta média (v2)";
+const VERSAO = "27/11 · teto com gasto e reservado";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
@@ -242,7 +242,15 @@ function Destaque({
       doMes.map((c) => ({ ...c.campanha, gasto: c.resultado.custoDescontos })),
       mes,
     );
-    return { livre: Math.max(0, regras.teto_mes - comprometido), comprometido, n: doMes.length };
+    // Campanha em andamento segura o teto inteiro; encerrada conta o que gastou.
+    const reservado = doMes.filter((c) => c.ativa).reduce((s, c) => s + c.campanha.teto, 0);
+    return {
+      livre: Math.max(0, regras.teto_mes - comprometido),
+      comprometido,
+      gasto: Math.max(0, comprometido - reservado),
+      reservado,
+      n: doMes.length,
+    };
   };
   const tetoAtual = tetoDoMes(mesAtual);
   const tetoProximo = ctx.mes !== mesAtual ? tetoDoMes(ctx.mes) : null;
@@ -314,7 +322,7 @@ function Destaque({
         <div className="mini-kpi">
           <span>
             Teto de {nomeMes(mesAtual)}{" "}
-            <Info texto="O teto é por mês e conta no mês em que a campanha acontece. Campanha em andamento separa o teto inteiro dela; campanha encerrada conta só o que gastou." />
+            <Info texto="O teto é por mês e conta no mês em que a campanha acontece. Campanha em andamento separa o teto inteiro dela; quando termina, só o que virou desconto fica contando e o resto volta para o mês." />
           </span>
           <b>{reais(restante)}</b>
           <div className="kpi-barra" aria-hidden="true">
@@ -325,6 +333,12 @@ function Destaque({
             {tetoAtual.n > 0 && ` · ${tetoAtual.n} ${tetoAtual.n === 1 ? "campanha" : "campanhas"}`} ·{" "}
             <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
           </small>
+          {tetoAtual.comprometido > 0 && (
+            <small>
+              {formatarMoeda(tetoAtual.gasto)} gastos
+              {tetoAtual.reservado > 0 && ` · ${formatarMoeda(tetoAtual.reservado)} reservados em campanhas abertas`}
+            </small>
+          )}
           {tetoProximo && (
             <small>
               {mesMaiusculo(ctx.mes)}: {reais(tetoProximo.livre)} livres

@@ -216,7 +216,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
 - **Teto no painel**: o mini-indicador mostra o teto do mês de hoje ("Teto de
   novembro", livres e quantas campanhas) e, se a próxima janela cair no mês seguinte,
   embaixo "Dezembro: R$ X livres". Os dois pela mesma `comprometidoNoMes` da criação:
-  campanha aberta reserva o teto inteiro, encerrada conta o que gastou.
+  campanha aberta reserva o teto inteiro, encerrada conta o que gastou. Uma linha
+  separa "R$ X gastos · R$ Y reservados em campanhas abertas". Depois do reset, as
+  duas campanhas de exemplo (teto R$ 500) contam R$ 272,32, o que gastaram.
 - **Teto mensal comprometido** (`comprometidoNoMes`): no mês de `data_janela`,
   campanha com janela ainda aberta reserva o `teto` inteiro; campanha
   encerrada conta só o que gastou.
