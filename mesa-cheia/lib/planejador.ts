@@ -246,7 +246,7 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
         if (av.ok) alternativas = [apresentar(fb.saida, fb.proposta, cardapio, fb.notas, base)];
         else motivo = `A regra fixa também foi bloqueada: ${av.bloqueios.map((b) => b.mensagem).join(" ")}`;
       } else {
-        motivo = "A regra fixa não encontrou janela com clientes elegíveis e saldo no teto do mês.";
+        motivo = "A regra fixa não encontrou janela com clientes elegíveis e saldo no teto de 30 dias.";
       }
     }
   }

@@ -22,6 +22,7 @@ export type EntradaKit = {
   janela: string;      // "terça, 18h30 às 20h"
   dia: string;         // "terça": a mensagem da equipe tem de citar
   hora_inicio: string; // "18h30": idem
+  hora_fim: string;    // "21h30": a mensagem da equipe diz até quando vale
   beneficio: string;   // "15% de desconto"
   segmento: string;    // rótulo do segmento
   publico: Publico;
@@ -74,6 +75,7 @@ export function entradaKit(
     janela: janelaNatural(c.dia_semana, c.hora_inicio, c.hora_fim, c.semanas ?? 1),
     dia,
     hora_inicio: formatarHora(c.hora_inicio),
+    hora_fim: formatarHora(c.hora_fim),
     beneficio,
     segmento: rotuloSegmento(c.segmento),
     publico: publicoDoSegmento(c.segmento, restaurante.cozinha, dia),
@@ -153,7 +155,16 @@ export const janelaNatural = (dia: number, inicio: number, fim: number, semanas 
     : `${nomeDiaLongo(dia)}, ${formatarHora(inicio)} às ${formatarHora(fim)}`;
 
 /** Confere o que torna o kit desta campanha e não de uma qualquer. */
-export function conferirEspecifico(kit: TextosKit, e: Pick<EntradaKit, "dia" | "hora_inicio" | "publico">): string[] {
+/**
+ * Confere o que torna o kit desta campanha e do fluxo com reserva. Três momentos:
+ * - chegada: o cliente avisa que recebeu a mensagem; a fala é fixa, em código (FALAS_CHEGADA);
+ * - conta: o script (script_garcom), lido depois que a tela confirmou o benefício;
+ * - aviso na entrada (cartaz_titulo/cartaz_linha): quem ainda não sentou lê.
+ */
+export function conferirEspecifico(
+  kit: TextosKit,
+  e: Pick<EntradaKit, "dia" | "hora_inicio" | "publico"> & Partial<Pick<EntradaKit, "hora_fim">>,
+): string[] {
   const erros: string[] = [];
   const baixo = (t: string) => t.toLowerCase();
   for (const [campo, texto] of Object.entries(kit)) {
@@ -161,42 +172,50 @@ export function conferirEspecifico(kit: TextosKit, e: Pick<EntradaKit, "dia" | "
     for (const m of texto.matchAll(/\{([^}]*)\}/g))
       if (m[1] !== "nome" || campo !== "script_garcom" || !e.publico.usar_nome)
         erros.push(`${campo} tem o marcador "${m[0]}", que não existe aqui`);
+    for (const f of FRASES_PARA_TODOS)
+      if (baixo(texto).includes(f)) erros.push(`${campo} usa "${f}", que soa como desconto para todos; só quem recebeu a oferta tem`);
   }
-  // Só alguns clientes têm desconto. Nenhum texto pode soar como "todo mundo ganha".
+
+  // Script da conta: lido no fechamento, para quem a tela confirmou.
   const script = baixo(kit.script_garcom);
   if (script.includes("telefone"))
     erros.push("script_garcom não pode pedir telefone: ele é lido depois que a tela já confirmou o benefício deste cliente");
-  for (const f of FRASES_PARA_TODOS)
-    for (const [campo, texto] of Object.entries(kit))
-      if (baixo(texto).includes(f)) erros.push(`${campo} usa "${f}", que soa como desconto para todos; só quem recebeu a oferta tem`);
   for (const p of ["senhor", "senhora", "moço", "moça", "querida", "querido"])
     if (new RegExp(`\\b${p}\\b`).test(script)) erros.push(`script_garcom diz "${p}": não suponha gênero nem trate por apelido`);
+  if (/bem[- ]vind/.test(script))
+    erros.push(`script_garcom é lido na hora da conta: "bem-vindo" é fala de chegada (e supõe gênero)`);
   if (/\bdigit/.test(script) || script.includes("registrar"))
     erros.push("script_garcom não pode pedir que o cliente digite ou registre nada: quem digita é o atendente, antes de ler o script");
   if (!MARCAS_PESSOAIS.some((m) => script.includes(m)))
     erros.push(`script_garcom precisa deixar claro que o desconto é deste cliente (ex.: "sua conta tem", "você recebeu")`);
-  for (const campo of ["cartaz_titulo", "cartaz_linha"] as const)
-    if (/\d\s*%|R\$/.test(kit[campo])) erros.push(`${campo} é visto por todas as mesas: não cite o valor do desconto`);
-  if (!baixo(`${kit.cartaz_titulo} ${kit.cartaz_linha}`).includes("receb") && !baixo(kit.cartaz_linha).includes("convite"))
-    erros.push(`cartaz precisa falar com quem recebeu a mensagem (ex.: "se você recebeu nossa mensagem")`);
+  if (!/aplic/.test(script)) erros.push(`script_garcom termina perguntando se pode aplicar o desconto (ex.: "Posso aplicar?")`);
+
+  // Aviso na entrada: todos leem antes de sentar. Não fala em desconto nem valor.
+  const aviso = baixo(`${kit.cartaz_titulo} ${kit.cartaz_linha}`);
+  for (const campo of ["cartaz_titulo", "cartaz_linha"] as const) {
+    if (/\d\s*%|R\$/.test(kit[campo])) erros.push(`${campo} é visto por todos: não cite o valor do desconto`);
+    if (baixo(kit[campo]).includes("desconto")) erros.push(`${campo} é visto por todos: não fale em desconto, fale com quem recebeu a mensagem`);
+  }
+  if (!/receb|convite/.test(aviso)) erros.push(`o aviso na entrada fala com quem recebeu a mensagem (ex.: "Recebeu nossa mensagem?")`);
+  if (!/cheg|entrada/.test(aviso)) erros.push(`o aviso na entrada diz para avisar na chegada`);
+
+  // Mensagem da equipe: os dois momentos, a tela decide quem tem desconto.
   const equipe = baixo(kit.mensagem_equipe);
   if (!equipe.includes("receb")) erros.push(`mensagem_equipe precisa dizer que só quem recebeu a oferta tem desconto`);
-  // Vagas: a equipe digita o telefone quando o cliente senta (guarda a vaga); o cartaz
-  // ensina a garantir a mesa pela mensagem antes de sair de casa.
-  if (!/sent|cheg/.test(equipe) || !equipe.includes("vaga"))
-    erros.push(`mensagem_equipe precisa dizer que as vagas são limitadas e que o telefone é digitado quando o cliente senta (isso guarda a vaga)`);
-  const cartaz = baixo(`${kit.cartaz_titulo} ${kit.cartaz_linha}`);
-  if (!/garant|confirm/.test(cartaz))
-    erros.push(`cartaz precisa dizer que dá para garantir a mesa pela mensagem`);
+  if (!equipe.includes("vaga")) erros.push(`mensagem_equipe precisa dizer que as vagas são limitadas`);
+  if (!/cheg|entrada|sent/.test(equipe)) erros.push(`mensagem_equipe precisa dizer o que fazer na chegada: digitar o telefone de quem disser que recebeu a mensagem`);
+  if (!/conta|fechamento/.test(equipe)) erros.push(`mensagem_equipe precisa dizer o que fazer na conta: digitar de novo e aplicar`);
+  if (!equipe.includes("tela")) erros.push(`mensagem_equipe precisa dizer que só tem desconto quem aparece na tela`);
   if (!equipe.includes(e.dia)) erros.push(`mensagem_equipe precisa citar o dia (${e.dia})`);
   if (!equipe.includes(baixo(e.hora_inicio))) erros.push(`mensagem_equipe precisa citar o horário de início (${e.hora_inicio})`);
+  if (e.hora_fim && !equipe.includes(baixo(e.hora_fim))) erros.push(`mensagem_equipe precisa citar até quando vale (${e.hora_fim})`);
   return erros;
 }
 
 export function validarKit(
   texto: string,
   beneficio: BeneficioKit,
-  entrada?: Pick<EntradaKit, "dia" | "hora_inicio" | "publico">,
+  entrada?: Pick<EntradaKit, "dia" | "hora_inicio" | "publico"> & Partial<Pick<EntradaKit, "hora_fim">>,
 ): { ok: true; kit: TextosKit } | { ok: false; erros: string[] } {
   let o: unknown;
   try {
@@ -233,39 +252,38 @@ export function kitTemplate(e: EntradaKit): TextosKit {
     frequenta_janela: {
       script: `Você é de vir na ${e.dia}, né? Por isso hoje sua conta tem ${b}. Posso aplicar?`,
       titulo: `Cliente de ${e.dia}?`,
-      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
+      linha: "Recebeu nossa mensagem? Avise na chegada que a gente confere.",
     },
     frequenta_outras: {
       script: `Que bom te ver aqui ${num} ${e.dia}. Por ter vindo nesse horário, sua conta tem ${b}. Posso aplicar?`,
       titulo: `Veio ${num} ${e.dia}?`,
-      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
+      linha: "Recebeu nossa mensagem? Avise na chegada que a gente confere.",
     },
     delivery_nunca_veio: {
       script: `Você já conhecia nossa comida pelo delivery, né? Para a primeira vez no salão, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Primeira vez no salão?",
-      linha: "Pede nosso delivery e recebeu a mensagem? Garanta sua mesa por ela e diga seu telefone ao sentar.",
+      linha: "Pede nosso delivery e recebeu a mensagem? Avise na chegada que a gente confere.",
     },
     sumiu_60_dias: {
       script: `Que bom te ver de volta. Para marcar a volta, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Que bom te ver de volta",
-      linha: "Recebeu nossa mensagem? Garanta sua mesa por ela e diga seu telefone ao garçom quando sentar.",
+      linha: "Recebeu nossa mensagem? Avise na chegada que a gente confere.",
     },
     cozinha_similar: {
-      script: `Primeira vez aqui na casa? Seja bem-vindo. Para essa primeira visita, sua conta tem ${b}. Posso aplicar?`,
+      script: `Primeira vez aqui na casa, né? Que bom que veio. Para essa primeira visita, sua conta tem ${b}. Posso aplicar?`,
       titulo: "Primeira vez aqui?",
-      linha: "Recebeu nosso convite? Garanta sua mesa por ele e diga seu telefone ao garçom quando sentar.",
+      linha: "Recebeu nosso convite? Avise na chegada que a gente confere.",
     },
   };
   const t = porPublico[e.publico.segmento];
   return {
     script_garcom: t.script,
     mensagem_equipe:
-      `Pessoal, campanha ${e.janela}: ${b} para quem recebeu a oferta (${e.publico.quem}). ` +
-      `Começa ${e.dia} às ${e.hora_inicio}. As vagas são limitadas: quem confirmou pela mensagem já tem a mesa garantida. ` +
-      `Quando o cliente sentar, digitem o telefone na tela do salão: isso guarda a vaga de quem não confirmou, se ainda houver. ` +
-      `No fechamento, digitem de novo. ` +
-      `Se aparecer benefício, leiam a frase da tela em tom de conversa, só para quem deu o telefone, e toquem em Aplicar. ` +
-      `Se não aparecer, leiam a frase que a tela mostra para esse caso: ninguém sai achando que foi esquecido.`,
+      `Pessoal, campanha ${e.janela}: ${b} só para quem recebeu a oferta (${e.publico.quem}). ` +
+      `Começa ${e.dia} às ${e.hora_inicio}. As vagas são limitadas e quem confirmou pela mensagem já tem a mesa garantida. ` +
+      `Na chegada: quem disser que recebeu a mensagem, digitem o telefone na tela do salão, em "Chegada", e leiam a frase que aparece. ` +
+      `Na conta: digitem de novo, em "Conta", leiam a frase da tela e toquem em Aplicar. ` +
+      `Só tem desconto quem aparece na tela; para quem não aparece, a tela também mostra o que dizer.`,
     cartaz_titulo: t.titulo,
     cartaz_linha: t.linha,
   };
@@ -276,12 +294,22 @@ export function kitTemplate(e: EntradaKit): TextosKit {
  * nunca chama modelo. Explica sem fazer o cliente se sentir passado para trás.
  */
 export const FALA_SEM_BENEFICIO =
-  "Que pena, hoje não tem desconto pra esse número. Mas fica de olho: a gente manda ofertas por mensagem de vez em quando, e aí é só falar o telefone na hora da conta.";
+  "Que pena, hoje não tem desconto pra esse número. Mas fica de olho: a gente manda ofertas por mensagem de vez em quando, e aí é só avisar quando chegar.";
 
 /** O que dizer quando a oferta deste telefone já foi usada. */
 export const falaJaUsado = (quando: string) =>
-  `Essa oferta já foi usada ${quando}. Cada oferta vale uma vez; quando chegar outra por mensagem, é só dizer o telefone na hora da conta.`;
+  `Essa oferta já foi usada ${quando}. Cada oferta vale uma vez; quando chegar outra por mensagem, é só avisar quando chegar.`;
 
 /** Quando a oferta existe, mas as vagas acabaram antes de o cliente chegar (sem confirmar). */
 export const FALA_SEM_VAGA =
   "Que pena, as vagas dessa oferta acabaram antes de você chegar. Da próxima vez, confirma pela mensagem que a sua fica guardada.";
+
+/**
+ * O que a recepção diz na chegada de quem tem oferta. Fixo em código (o salão nunca chama
+ * modelo): depende só de a vaga ter sido confirmada antes ou guardada agora.
+ */
+export function falaChegada(reserva: { origem: "confirmacao" | "chegada"; agora: boolean }, beneficio: string): string {
+  if (reserva.origem === "chegada" && reserva.agora)
+    return `Ainda tinha vaga, então sua mesa ficou garantida agora: ${beneficio} na hora da conta.`;
+  return `Sua mesa está garantida: ${beneficio} na hora da conta.`;
+}

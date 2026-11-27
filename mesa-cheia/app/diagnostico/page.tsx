@@ -42,7 +42,7 @@ export default function PaginaDiagnostico() {
               campanha trouxe.
             </li>
             <li>
-              <b>Você põe o limite.</b> Teto do mês e desconto máximo. Nada passa disso.
+              <b>Você põe o limite.</b> Teto de gasto e desconto máximo. Nada passa disso.
             </li>
             <li>
               <b>Para sozinha.</b> Se o horário encheu, a campanha pausa.

@@ -5,7 +5,7 @@ import { calcularDesconto } from "@/lib/campanha";
 import { FUSO, formatarMoeda } from "@/lib/dominio";
 import { mascararTelefone } from "@/lib/telefone";
 import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
-import { FALA_SEM_BENEFICIO, FALA_SEM_VAGA, falaJaUsado } from "@/lib/kit-regras";
+import { FALA_SEM_BENEFICIO, FALA_SEM_VAGA, falaChegada, falaJaUsado } from "@/lib/kit-regras";
 import type { RespostaConsulta, RespostaResgate } from "@/lib/resgate";
 
 type Estado =
@@ -27,8 +27,29 @@ const dataHora = new Intl.DateTimeFormat("pt-BR", {
 const horaCurta = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, weekday: "short", hour: "2-digit", minute: "2-digit" });
 const dataCurta = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, day: "2-digit", month: "2-digit" });
 
+type Modo = "chegada" | "conta";
+
 export function Salao() {
   const [digitos, setDigitos] = useState("");
+  // Dois momentos: na chegada a tela guarda a vaga e diz a fala de chegada; na conta,
+  // aplica o desconto. O modo fica lembrado neste aparelho (só conveniência).
+  const [modo, setModoEstado] = useState<Modo>("chegada");
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem("mesa-cheia-modo-salao");
+      if (salvo === "chegada" || salvo === "conta") setModoEstado(salvo);
+    } catch {
+      /* sem armazenamento: fica em "chegada" */
+    }
+  }, []);
+  function setModo(m: Modo) {
+    setModoEstado(m);
+    try {
+      localStorage.setItem("mesa-cheia-modo-salao", m);
+    } catch {
+      /* ignora */
+    }
+  }
   const [estado, setEstado] = useState<Estado>({ fase: "digitando" });
 
   async function consultar(tel: string) {
@@ -115,7 +136,19 @@ export function Salao() {
 
   return (
     <div className={`salao ${ativo ? "com-beneficio" : ""}`}>
-      {!emResposta && <p className="visor-rotulo">Telefone do cliente</p>}
+      <div className="salao-modo" role="group" aria-label="Momento do atendimento">
+        <button type="button" aria-pressed={modo === "chegada"} onClick={() => setModo("chegada")}>
+          Chegada
+        </button>
+        <button type="button" aria-pressed={modo === "conta"} onClick={() => setModo("conta")}>
+          Conta
+        </button>
+      </div>
+      {!emResposta && (
+        <p className="visor-rotulo">
+          {modo === "chegada" ? "Telefone de quem disse que recebeu a mensagem" : "Telefone do cliente, na hora da conta"}
+        </p>
+      )}
       <Visor digitos={digitos} compacto={emResposta} />
 
       {estado.fase === "digitando" && digitos.length < 11 && (
@@ -133,6 +166,7 @@ export function Salao() {
 
       {estado.fase === "resposta" && estado.r.tipo === "ativo" && (
         <CartaoAtivo
+          modo={modo}
           r={estado.r}
           aoAplicar={(res) => estado.r.tipo === "ativo" && setEstado({ fase: "aplicado", nome: estado.r.nome, r: res })}
         />
@@ -276,9 +310,11 @@ function Teclado({ aoTeclar, desativado }: { aoTeclar: (t: string) => void; desa
 }
 
 function CartaoAtivo({
+  modo,
   r,
   aoAplicar,
 }: {
+  modo: Modo;
   r: Extract<RespostaConsulta, { tipo: "ativo" }>;
   aoAplicar: (res: Extract<RespostaResgate, { ok: true }>) => void;
 }) {
@@ -291,6 +327,36 @@ function CartaoAtivo({
   const valorConta = lerNumeroBR(conta);
   const previa = calcularDesconto(r.calculo, valorConta, r.calculo.descontoMax, r.calculo.tetoRestante);
   const podeAplicar = valorConta > 0 && !enviando;
+
+  const linhaReserva =
+    r.reserva.origem === "confirmacao"
+      ? "Mesa garantida: confirmou pela mensagem."
+      : r.reserva.agora
+        ? `Vaga guardada agora, até ${horaCurta.format(new Date(r.reserva.ate))}.`
+        : `Vaga guardada na chegada, até ${horaCurta.format(new Date(r.reserva.ate))}.`;
+
+  // Chegada: só confirma a mesa e diz a fala pronta. O desconto é aplicado na conta.
+  if (modo === "chegada")
+    return (
+      <>
+        <div className="cartao ativo">
+          <div className="cartao-topo">
+            <p className="cartao-nome">{r.nome}</p>
+          </div>
+          <p className="cartao-destaque">{r.reserva.origem === "confirmacao" || !r.reserva.agora ? "Mesa garantida" : "Vaga guardada agora"}</p>
+          <p className="cartao-linha">
+            {r.beneficio} na hora da conta · vale {r.validade}
+          </p>
+          <p className="cartao-reserva">
+            {r.reserva.origem === "confirmacao"
+              ? "Confirmou pela mensagem."
+              : `Guardada até ${horaCurta.format(new Date(r.reserva.ate))}.`}
+          </p>
+        </div>
+        <Fala texto={falaChegada(r.reserva, r.beneficio)} />
+        <p className="salao-status">Na hora da conta, troque para “Conta” e digite o telefone de novo.</p>
+      </>
+    );
 
   async function aplicar() {
     if (travado.current || !podeAplicar) return;
@@ -327,13 +393,7 @@ function CartaoAtivo({
           <p className="cartao-linha">
             Vale {r.validade} · código <b className="mono">{r.codigo}</b>
           </p>
-          <p className="cartao-reserva">
-            {r.reserva.origem === "confirmacao"
-              ? "Mesa garantida: confirmou pela mensagem."
-              : r.reserva.agora
-                ? `Vaga guardada agora, até ${horaCurta.format(new Date(r.reserva.ate))}.`
-                : `Vaga guardada na chegada, até ${horaCurta.format(new Date(r.reserva.ate))}.`}
-          </p>
+          <p className="cartao-reserva">{linhaReserva}</p>
         </div>
 
         <div className="conta-e-mesa">

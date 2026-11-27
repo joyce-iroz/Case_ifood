@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
-const VERSAO = "27/11 · kit fala da reserva";
+const VERSAO = "27/11 · público sem oferta disponível explicado";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
@@ -20,7 +20,7 @@ import type { Regras } from "@/lib/campanha";
 import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
 import { carregarPainel, type CampanhaPainel, type TelefoneResgatado, type TelefoneTeste } from "@/lib/painel";
-import { textoBeneficio, comprometidoNoMes } from "@/lib/campanha";
+import { textoBeneficio, comprometidoNoPeriodo, diasEntre, DIAS_DO_TETO } from "@/lib/campanha";
 import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
 import { janelaMaisVazia, type ResumoOcupacao } from "@/lib/ocupacao";
@@ -232,31 +232,23 @@ function Destaque({
   const pior = janelaMaisVazia(resumo);
   const resgates = painel.reduce((s, c) => s + c.resultado.resgatados, 0);
   const incrementais = painel.reduce((s, c) => s + c.resultado.resgatesIncrementais, 0);
-  // Teto por mês, a mesma conta da criação de campanha (comprometidoNoMes): campanha
-  // ainda aberta reserva o teto inteiro; encerrada conta o que gastou. Mostra o mês de
-  // hoje e, embaixo, o mês da próxima janela, se for outro.
-  const mesAtual = hojeNoFuso().slice(0, 7);
-  const tetoDoMes = (mes: string) => {
-    const doMes = painel.filter((c) => c.campanha.data_janela.startsWith(mes));
-    const comprometido = comprometidoNoMes(
-      doMes.map((c) => ({ ...c.campanha, gasto: c.resultado.custoDescontos })),
-      mes,
-    );
-    // Campanha em andamento segura o teto inteiro; encerrada conta o que gastou.
-    const reservado = doMes.filter((c) => c.ativa).reduce((s, c) => s + c.campanha.teto, 0);
-    return {
-      livre: Math.max(0, regras.teto_mes - comprometido),
-      comprometido,
-      gasto: Math.max(0, comprometido - reservado),
-      reservado,
-      n: doMes.length,
-    };
+  // Teto de 30 dias, a mesma conta da criação de campanha (comprometidoNoPeriodo), em
+  // volta da próxima janela: campanha a menos de 30 dias dela divide o teto. Aberta
+  // segura o teto inteiro; encerrada conta o que gastou.
+  const doPeriodo = painel.filter((c) => Math.abs(diasEntre(c.campanha.data_janela, ctx.dataJanela)) < DIAS_DO_TETO);
+  const comprometido = comprometidoNoPeriodo(
+    doPeriodo.map((c) => ({ ...c.campanha, gasto: c.resultado.custoDescontos })),
+    ctx.dataJanela,
+  );
+  const reservado = doPeriodo.filter((c) => c.ativa).reduce((s, c) => s + c.campanha.teto, 0);
+  const tetoAtual = {
+    comprometido,
+    reservado,
+    gasto: Math.max(0, comprometido - reservado),
+    n: doPeriodo.length,
   };
-  const tetoAtual = tetoDoMes(mesAtual);
-  const tetoProximo = ctx.mes !== mesAtual ? tetoDoMes(ctx.mes) : null;
-  const restante = tetoAtual.livre;
-  const usado = regras.teto_mes > 0 ? Math.min(100, (tetoAtual.comprometido / regras.teto_mes) * 100) : 0;
-  const mesMaiusculo = (m: string) => nomeMes(m).replace(/^./, (c) => c.toUpperCase());
+  const restante = Math.max(0, regras.teto_mes - comprometido);
+  const usado = regras.teto_mes > 0 ? Math.min(100, (comprometido / regras.teto_mes) * 100) : 0;
   const fracas = resumo.vaziasAbaixoMinimo30d;
   // Premissa: cada mesa fica 1h30; cada cadeira vazia nesse tempo é uma conta de ticket médio que não entrou.
   const naoEntrou = Math.round((fracas / PERMANENCIA_H) * ticketMedio);
@@ -321,8 +313,8 @@ function Destaque({
         )}
         <div className="mini-kpi">
           <span>
-            Teto de {nomeMes(mesAtual)}{" "}
-            <Info texto="O teto é por mês e conta no mês em que a campanha acontece. Campanha em andamento separa o teto inteiro dela; quando termina, só o que virou desconto fica contando e o resto volta para o mês." />
+            Teto de 30 dias{" "}
+            <Info texto="Campanhas a menos de 30 dias uma da outra dividem o mesmo teto, então a virada do mês não zera a conta. Campanha em andamento separa o teto inteiro dela; quando termina, só o que virou desconto fica contando." />
           </span>
           <b>{reais(restante)}</b>
           <div className="kpi-barra" aria-hidden="true">
@@ -337,12 +329,6 @@ function Destaque({
             <small>
               {formatarMoeda(tetoAtual.gasto)} gastos
               {tetoAtual.reservado > 0 && ` · ${formatarMoeda(tetoAtual.reservado)} reservados em campanhas abertas`}
-            </small>
-          )}
-          {tetoProximo && (
-            <small>
-              {mesMaiusculo(ctx.mes)}: {reais(tetoProximo.livre)} livres
-              {tetoProximo.n > 0 && ` · ${tetoProximo.n} ${tetoProximo.n === 1 ? "campanha" : "campanhas"}`}
             </small>
           )}
         </div>

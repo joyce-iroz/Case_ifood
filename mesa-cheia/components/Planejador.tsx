@@ -449,12 +449,23 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
       <label className="campo">
         Público
         <select value={p.segmento} onChange={(e) => aoMudar({ ...p, segmento: e.target.value as Segmento })}>
-          {segmentos.map((s) => (
-            <option key={s.id} value={s.id}>
-              {rotuloSegmento(s.id)} · {janela.segmentos[s.id].elegiveis} clientes
-            </option>
-          ))}
+          {SEGMENTOS.map((s) => {
+            const n = janela.segmentos[s.id].elegiveis;
+            // Público sem ninguém disponível fica na lista, desativado e com o motivo:
+            // todos receberam oferta (ou ficaram no controle) há menos de N dias.
+            return (
+              <option key={s.id} value={s.id} disabled={n === 0}>
+                {rotuloSegmento(s.id)} · {n > 0 ? `${n} clientes` : `todos já tiveram oferta nos últimos ${cardapio.regras.dias_entre_ofertas} dias`}
+              </option>
+            );
+          })}
         </select>
+        {segmentos.length < SEGMENTOS.length && (
+          <small className="legenda">
+            Público desativado: todos receberam oferta (ou ficaram no grupo de controle) há menos de{" "}
+            {cardapio.regras.dias_entre_ofertas} dias. Volta sozinho depois disso; o prazo fica nas Regras.
+          </small>
+        )}
       </label>
       <label className="campo">
         Tipo
@@ -530,7 +541,7 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
           aria-valuetext={formatarMoeda(p.teto)}
         />
         <span className="legenda">
-          até {formatarMoeda(tetos.at(-1) ?? 0)}, o que sobra no mês
+          até {formatarMoeda(tetos.at(-1) ?? 0)}, o que sobra no teto de 30 dias
         </span>
       </div>
     </div>
@@ -550,7 +561,7 @@ function PreviaView({ previa, carregando }: { previa: Previa | null; carregando:
         <b>{previa.custoMaximo === null ? "—" : formatarMoeda(previa.custoMaximo)}</b>
       </div>
       <div>
-        <span>Sobra em {previa.mes ? nomeMes(previa.mes) : "—"}</span>
+        <span>Sobra no teto de 30 dias</span>
         <b className={previa.saldoDepois !== null && previa.saldoDepois < 0 ? "alerta-texto" : undefined}>
           {previa.saldoDepois === null ? "—" : formatarMoeda(previa.saldoDepois)}
         </b>

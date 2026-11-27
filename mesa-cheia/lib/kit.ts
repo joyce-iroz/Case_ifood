@@ -25,19 +25,20 @@ O texto tem de ser desta campanha, não de uma qualquer:
 - Não suponha gênero ("senhor", "senhora") nem use apelido. Não peça que o cliente digite ou registre nada.
 - Não diga o nome do cliente no script: na mesa pode haver gente que não recebeu oferta. Fale em tom de conversa, só com quem deu o telefone. Não use marcadores como {nome}.
 - Não use frases de propaganda que serviriam para qualquer restaurante: ${FRASES_GENERICAS.map((f) => `"${f}"`).join(", ")}.
-- mensagem_equipe cita o dia ("dados.dia") e o horário de início ("dados.hora_inicio") escritos do mesmo jeito, e diz em poucas palavras quem recebeu a oferta.
-- cartaz_titulo fala com esse público (ex.: quem nunca sentou no salão), não com todo mundo.
+- A campanha funciona como uma reserva, em dois momentos. Na chegada, quem recebeu a mensagem avisa e a recepção digita o telefone na tela, em "Chegada": a tela diz se a mesa está garantida e mostra uma fala pronta (você não escreve essa fala). Na conta, o atendente digita de novo, em "Conta", lê o script_garcom e aplica.
+- mensagem_equipe cita o dia ("dados.dia"), o horário de início ("dados.hora_inicio") e o de fim ("dados.hora_fim") escritos do mesmo jeito, diz em poucas palavras quem recebeu a oferta e explica os dois momentos.
+- cartaz_titulo e cartaz_linha são o AVISO NA ENTRADA, lido por quem ainda não sentou. O título fala com esse público (ex.: quem nunca sentou no salão).
 - Só alguns clientes têm desconto; os outros da mesa e do salão não. Nenhum texto pode soar como desconto para todos:
   nada de "automaticamente", "todo mundo", "para todos". O script é lido só depois que a tela confirmou o benefício
   deste cliente: não pede telefone e diz que o desconto é dele ("sua conta tem", "você recebeu").
-- O cartaz fica na mesa e todos leem: não cita o valor do desconto e fala só com quem recebeu a mensagem.
-- A mensagem da equipe diz que só quem recebeu a oferta tem desconto.
+- O aviso na entrada é lido por todos: não fala em desconto nem cita valor; fala só com quem recebeu a mensagem e pede para avisar na chegada.
+- A mensagem da equipe diz que só tem desconto quem aparece na tela.
 
 Responda só com um objeto JSON, sem texto fora dele, com exatamente estas chaves:
-- script_garcom: o que o atendente fala depois que a tela mostrou que ESTE cliente tem o benefício. O telefone JÁ FOI digitado pelo atendente: o script nunca fala em telefone. Palavras proibidas no script: telefone, digite, registrar, cadastro, senhor, senhora, automaticamente, todos. Use "exemplo_de_script" como modelo de tom e tamanho e escreva uma variação sua. No máximo 45 palavras, tom falado, sem jargão de marketing.
-- mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício, quem recebeu) e do que fazer. As vagas são limitadas: quem confirmou pela mensagem já tem a mesa garantida; quando o cliente sentar, digitar o telefone dele na tela do salão (isso guarda a vaga de quem não confirmou, se ainda houver); no fechamento, digitar de novo e, se aparecer benefício, ler a frase da tela e aplicar. Tom de recado interno.
-- cartaz_titulo: chamada curta para cartaz de mesa, no máximo 6 palavras.
-- cartaz_linha: uma linha explicando como o cliente usa: garantir a mesa pela mensagem que recebeu e dizer o telefone ao garçom quando sentar.
+- script_garcom: o que o atendente fala NA HORA DA CONTA, depois que a tela mostrou que ESTE cliente tem o benefício. O telefone JÁ FOI digitado: o script nunca fala em telefone. Não é boas-vindas (isso é na chegada). Termina perguntando se pode aplicar ("Posso aplicar?"). Palavras proibidas no script: telefone, digite, registrar, cadastro, senhor, senhora, bem-vindo, automaticamente, todos. Use "exemplo_de_script" como modelo de tom e tamanho e escreva uma variação sua. No máximo 45 palavras, tom falado, sem jargão de marketing.
+- mensagem_equipe: recado para o grupo de WhatsApp da equipe: campanha (dia, horário de início e fim, benefício, quem recebeu), vagas limitadas e quem confirmou já tem a mesa garantida. Na chegada: digitar o telefone de quem disser que recebeu a mensagem, em "Chegada", e ler a frase da tela. Na conta: digitar de novo, em "Conta", ler a frase e aplicar. Só tem desconto quem aparece na tela. Tom de recado interno.
+- cartaz_titulo: título do aviso na entrada, no máximo 6 palavras, sem a palavra desconto.
+- cartaz_linha: uma linha do aviso na entrada: quem recebeu a mensagem avisa na chegada. Sem a palavra desconto.
 Se a entrada tiver "erros_da_tentativa_anterior", corrija exatamente esses pontos.`;
 
 const TENTATIVAS_KIT = 2; // uma tentativa e mais uma
@@ -148,10 +149,10 @@ export function kitAtual(kit: Kit, c: CampanhaKit, r: RestauranteKit): Kit {
 
 /** As mensagens da validação falam com o modelo; para o dono, os campos têm o nome da tela. */
 const NOMES_CAMPO: Record<string, string> = {
-  script_garcom: "O script do garçom",
+  script_garcom: "O script da conta",
   mensagem_equipe: "A mensagem para a equipe",
-  cartaz_titulo: "O título do cartaz",
-  cartaz_linha: "A linha do cartaz",
+  cartaz_titulo: "O título do aviso na entrada",
+  cartaz_linha: "A linha do aviso na entrada",
 };
 const paraODono = (erro: string) =>
   erro

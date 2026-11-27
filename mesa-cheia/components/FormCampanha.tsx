@@ -205,7 +205,13 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
                 {c ? (
                   <>
                     <b>{c.total}</b>
-                    {c.elegiveis < c.total ? <> · {c.elegiveis} podem receber</> : " clientes"}
+                    {c.elegiveis === 0 && c.total > 0 ? (
+                      <> · todos tiveram oferta nos últimos {ctx?.regras.dias_entre_ofertas} dias</>
+                    ) : c.elegiveis < c.total ? (
+                      <> · {c.elegiveis} podem receber (os outros tiveram oferta há pouco)</>
+                    ) : (
+                      " clientes"
+                    )}
                   </>
                 ) : (
                   "…"
@@ -334,7 +340,7 @@ const ROTULO_REGRA: Record<Bloqueio["regra"], string> = {
   janela: "Horário",
   desconto_max: "Desconto máximo",
   ocupacao_min: "Ocupação mínima",
-  teto_mes: "Teto do mês",
+  teto_mes: "Teto a cada 30 dias",
   dias_entre_ofertas: "Intervalo entre ofertas",
   cardapio: "Cardápio do planejador",
 };

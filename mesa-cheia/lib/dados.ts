@@ -279,7 +279,7 @@ export async function atualizarRegras(entrada: unknown, id = RESTAURANTE_DEMO_ID
   };
   // NaN (texto ilegível, null, campo ausente) recebe mensagem própria antes da checagem de faixa.
   const nomes: Record<keyof typeof regras, string> = {
-    teto_mes: "teto do mês",
+    teto_mes: "teto de 30 dias",
     desconto_max: "desconto máximo",
     dias_entre_ofertas: "dias entre ofertas",
     ocupacao_min: "ocupação mínima",
@@ -291,7 +291,7 @@ export async function atualizarRegras(entrada: unknown, id = RESTAURANTE_DEMO_ID
       erros: naoNumero.map((k) => `${nomes[k]}: "${String(o[k] ?? "")}" não é um número válido`),
     };
   const erros: string[] = [];
-  if (!(regras.teto_mes >= 0 && regras.teto_mes <= 1_000_000)) erros.push("teto do mês entre 0 e 1.000.000");
+  if (!(regras.teto_mes >= 0 && regras.teto_mes <= 1_000_000)) erros.push("teto de 30 dias entre 0 e 1.000.000");
   if (!(regras.desconto_max >= 0 && regras.desconto_max <= 100)) erros.push("desconto máximo entre 0% e 100%");
   if (!(Number.isInteger(regras.dias_entre_ofertas) && regras.dias_entre_ofertas >= 0 && regras.dias_entre_ofertas <= 365))
     erros.push("dias entre ofertas: inteiro entre 0 e 365");

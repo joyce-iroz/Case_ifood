@@ -10,7 +10,7 @@ import {
 } from "./dados";
 import { RESTAURANTE_DEMO_ID, formatarJanela, formatarValidade, hojeNoFuso, timeDaHora } from "./dominio";
 import {
-  comprometidoNoMes,
+  comprometidoNoPeriodo,
   gerarCodigos,
   janelaDa,
   lerProposta,
@@ -142,7 +142,7 @@ export type Base = Awaited<ReturnType<typeof carregarBase>>;
 export function avaliarJanela(base: Base, janela: Janela, semanas = 1) {
   const proxima = proximaJanela(janela, undefined, semanas);
   const mes = proxima.data.slice(0, 7);
-  const comprometido = comprometidoNoMes(base.campanhasComGasto, mes);
+  const comprometido = comprometidoNoPeriodo(base.campanhasComGasto, proxima.data);
 
   const porSegmento = new Map<Segmento, string[]>(SEGMENTOS.map((s) => [s.id, []]));
   for (const c of base.clientes.clientes) {
@@ -171,8 +171,9 @@ export function avaliarJanela(base: Base, janela: Janela, semanas = 1) {
 export type ContextoJanela = {
   contagens: Record<Segmento, { total: number; elegiveis: number }>;
   ocupacaoJanela: number | null;
-  tetoRestanteMes: number;
+  tetoRestanteMes: number; // teto de 30 dias: o que sobra contando as campanhas a menos de 30 dias desta
   mes: string;
+  dataJanela: string; // primeira ocorrência: o teto de 30 dias é contado em volta dela
   validade: string;
   regras: Regras;
   limiteValorFixo: number;
@@ -196,6 +197,7 @@ export function resumirContexto(ctx: ReturnType<typeof avaliarJanela>, janela: J
     tetoRestanteMes: ctx.tetoRestanteMes,
     mes: ctx.mes,
     validade: formatarJanela(ctx.proxima.data, janela.inicio, janela.fim),
+    dataJanela: ctx.proxima.data,
     regras: ctx.regras,
     limiteValorFixo: limiteValorFixo(ctx.regras, ctx.restaurante),
     ticketMedio: ctx.restaurante.ticket_medio,

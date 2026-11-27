@@ -48,7 +48,8 @@ export default async function PaginaOferta({ params }: { params: Promise<{ token
           <div className="oferta-ok">
             <b>Mesa garantida.</b>
             <span>
-              Na hora da conta, diga seu telefone ao garçom. Vale até {quando.format(new Date(o.garantidaAte!))}.
+              Ao chegar, avise que recebeu a mensagem e diga seu telefone. O desconto entra na conta. Vale até{" "}
+              {quando.format(new Date(o.garantidaAte!))}.
             </span>
           </div>
         )}

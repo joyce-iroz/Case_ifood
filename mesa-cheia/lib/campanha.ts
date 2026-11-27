@@ -147,7 +147,7 @@ export function validarProposta(
   if (p.teto > ctx.tetoRestanteMes) {
     bloqueios.push({
       regra: "teto_mes",
-      mensagem: `O teto da campanha (${formatarMoeda(p.teto)}) passa do que resta do teto mensal em ${ctx.mes.split("-").reverse().join("/")}: ${formatarMoeda(Math.max(0, ctx.tetoRestanteMes))} de ${formatarMoeda(regras.teto_mes)}.`,
+      mensagem: `O teto da campanha (${formatarMoeda(p.teto)}) passa do que sobra no teto de 30 dias: ${formatarMoeda(Math.max(0, ctx.tetoRestanteMes))} de ${formatarMoeda(regras.teto_mes)}, contando as campanhas a menos de 30 dias desta.`,
     });
   }
 
@@ -204,6 +204,32 @@ export function dentroDeOcorrencia(
  * Quanto do teto mensal já está comprometido no mês: campanha cuja janela ainda não
  * terminou reserva o teto inteiro; campanha encerrada conta só o que gastou.
  */
+/**
+ * O teto vale para 30 dias: campanhas a menos de 30 dias uma da outra (pela primeira
+ * ocorrência) dividem o mesmo teto. Assim a virada do mês não zera o teto: uma campanha
+ * de 29/11 e outra de 01/12 contam juntas.
+ */
+export const DIAS_DO_TETO = 30;
+export const diasEntre = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+export const periodoDoTeto = (data: string) => ({ de: somarDias(data, -(DIAS_DO_TETO - 1)), ate: somarDias(data, DIAS_DO_TETO - 1) });
+
+/** Quanto do teto as campanhas a menos de 30 dias de `data` já usam (mesma regra por campanha). */
+export function comprometidoNoPeriodo(
+  campanhas: { data_janela: string; hora_fim: number; teto: number; gasto: number; semanas?: number; status?: string }[],
+  data: string,
+  agoraIso = new Date().toISOString(),
+): number {
+  let total = 0;
+  for (const c of campanhas) {
+    if (Math.abs(diasEntre(c.data_janela, data)) >= DIAS_DO_TETO) continue;
+    const terminou =
+      c.status === "pausada" || new Date(fimDaCampanha(c)).getTime() <= new Date(agoraIso).getTime();
+    total += terminou ? c.gasto : c.teto;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 export function comprometidoNoMes(
   campanhas: { data_janela: string; hora_fim: number; teto: number; gasto: number; semanas?: number; status?: string }[],
   mes: string,

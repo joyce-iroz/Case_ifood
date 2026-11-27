@@ -7,7 +7,7 @@ import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
 
 const CAMPOS: { k: keyof Regras; rotulo: string; sufixo: string; casas: number | [number, number] }[] = [
   { k: "desconto_max", rotulo: "Desconto máximo", sufixo: "%", casas: [0, 2] },
-  { k: "teto_mes", rotulo: "Teto do mês", sufixo: "R$", casas: 2 },
+  { k: "teto_mes", rotulo: "Teto a cada 30 dias", sufixo: "R$", casas: 2 },
   { k: "ocupacao_min", rotulo: "Ocupação mínima", sufixo: "%", casas: [0, 2] },
   { k: "dias_entre_ofertas", rotulo: "Dias entre ofertas", sufixo: "dias", casas: 0 },
 ];

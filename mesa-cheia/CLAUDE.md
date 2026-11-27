@@ -213,15 +213,14 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   abaixo de `ocupacao_min`; `teto` da campanha ≤ teto mensal restante;
   pelo menos um cliente elegível. `dias_entre_ofertas` tira do lote quem
   recebeu oferta recente; se tirar todos, bloqueia.
-- **Teto no painel**: o mini-indicador mostra o teto do mês de hoje ("Teto de
-  novembro", livres e quantas campanhas) e, se a próxima janela cair no mês seguinte,
-  embaixo "Dezembro: R$ X livres". Os dois pela mesma `comprometidoNoMes` da criação:
-  campanha aberta reserva o teto inteiro, encerrada conta o que gastou. Uma linha
-  separa "R$ X gastos · R$ Y reservados em campanhas abertas". Depois do reset, as
-  duas campanhas de exemplo (teto R$ 500) contam R$ 272,32, o que gastaram.
-- **Teto mensal comprometido** (`comprometidoNoMes`): no mês de `data_janela`,
-  campanha com janela ainda aberta reserva o `teto` inteiro; campanha
-  encerrada conta só o que gastou.
+- **Teto de 30 dias** (`teto_mes` no banco; `comprometidoNoPeriodo`, `DIAS_DO_TETO`):
+  campanhas a menos de 30 dias uma da outra (pela primeira ocorrência) dividem o
+  mesmo teto, para a virada do mês não zerar a conta. Campanha com janela ainda
+  aberta reserva o `teto` inteiro; encerrada conta só o que gastou. A criação
+  (`contextoDaJanela`) conta em volta da data da nova campanha; o painel, em volta da
+  próxima janela (`ctx.dataJanela`), com "R$ X gastos · R$ Y reservados em campanhas
+  abertas". Depois do reset, as duas campanhas de exemplo (teto R$ 500) contam
+  R$ 272,32, o que gastaram.
 - **Segmentos** (`lib/segmentos.ts`), em relação à janela, sem sobreposição:
   `frequenta_janela` = visita nos últimos 60 dias naquele dia da semana e faixa
   de hora; `frequenta_outras` = visita nos últimos 60 dias, nenhuma na janela;
@@ -279,6 +278,11 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   qualquer dia; depois de `valido_ate` sempre recusa. Em produção, `false`.
 - **Expiração** é preguiçosa: `expirarVencidos()` roda nas leituras do painel
   e do salão e marca `emitido` vencido como `expirado`.
+- **Salão em dois momentos** (botões "Chegada" e "Conta", lembrados no aparelho).
+  Chegada: quem diz que recebeu a mensagem tem o telefone digitado; a consulta guarda
+  a vaga e a tela mostra "Mesa garantida" ou "Vaga guardada agora" e a fala fixa
+  `falaChegada`; não aplica. Conta: conta, pessoas, o script da conta e Aplicar.
+  Sem vaga ou sem oferta, as falas fixas valem nos dois momentos.
 - **Salão** tem três respostas e só três: `ativo`, `nenhum`, `resgatado`.
   Telefone que não existe no banco é `nenhum`, igual a cliente sem benefício.
   Telefone sempre mascarado (`mascararTelefone`, formato `(11) 9••••-••41`).
@@ -297,6 +301,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
      (rodízio entre os dias, para terça não tomar a lista e quarta aparecer). O
      editor mostra os dias como botões e as janelas do dia embaixo; dia sem
      janela de 1h abaixo do mínimo não aparece (use o formulário manual).
+     Público com 0 elegíveis (todos tiveram oferta ou ficaram no controle há menos de
+     `dias_entre_ofertas`) fica no editor, desativado, com o motivo; o formulário
+     manual também diz o motivo.
   2. Código monta o cardápio (`montarCardapio`): por janela, elegíveis por
      segmento, saldo do teto do mês e tetos permitidos (`opcoesTeto`: de R$ 50
      em R$ 50 até o saldo); valores permitidos por tipo (`opcoesValor`, todos
@@ -385,10 +392,13 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   confirmou o benefício) e tem uma marca pessoal ("sua conta tem", "você recebeu");
   `FRASES_PARA_TODOS` ("automaticamente", "todo mundo"...) reprova; o cartaz, que
   todas as mesas leem, não cita valor e fala com quem "recebeu" a mensagem; a
-  mensagem da equipe diz que só quem recebeu tem desconto. Reserva: a mensagem da
-  equipe diz que as vagas são limitadas, que quem confirmou já tem a mesa garantida e
-  que o telefone é digitado quando o cliente senta (guarda a vaga); o cartaz ensina a
-  garantir a mesa pela mensagem e dizer o telefone ao sentar ("garant"/"confirm"). A entrada leva
+  mensagem da equipe diz que só quem recebeu tem desconto. Kit no fluxo com reserva,
+  por momento: a fala de chegada é fixa em código (`falaChegada`); o script
+  (`script_garcom`) é o da CONTA: sem "bem-vindo", termina perguntando se pode
+  aplicar; o "cartaz" (`cartaz_titulo`/`cartaz_linha`) é o AVISO NA ENTRADA, lido por
+  quem ainda não sentou: sem "desconto" nem valor, fala com quem recebeu e pede para
+  avisar na chegada; a mensagem da equipe tem vagas limitadas, os dois momentos
+  (chegada e conta), "só tem desconto quem aparece na tela", dia, início e fim. A entrada leva
   `publico` (`publicoDoSegmento`: quem é o cliente e como falar com ele), montada
   por `entradaKit`. Kits antigos com `{nome}` ainda são trocados pelo primeiro nome
   (`aplicarNome`, no servidor). Para `nenhum` e `resgatado`, o salão mostra uma

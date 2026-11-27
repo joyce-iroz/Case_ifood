@@ -10,9 +10,9 @@ export type ItemKit = { campanhaId: string; rotulo: string; beneficio: string; k
 
 type Aba = "script" | "equipe" | "cartaz";
 const ABAS: { id: Aba; rotulo: string }[] = [
-  { id: "script", rotulo: "Script do garçom" },
+  { id: "script", rotulo: "Script da conta" },
   { id: "equipe", rotulo: "Mensagem para a equipe" },
-  { id: "cartaz", rotulo: "Cartaz de mesa" },
+  { id: "cartaz", rotulo: "Aviso na entrada" },
 ];
 
 const dataHora = new Intl.DateTimeFormat("pt-BR", {
@@ -165,10 +165,10 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
             <div className="kit-edicao">
               {(
                 [
-                  ["script_garcom", "Script do garçom", "Lido só para quem tem desconto, depois que a tela confirmar.", 3],
-                  ["mensagem_equipe", "Mensagem para a equipe", "Vai para o grupo da equipe. Diga que as vagas são limitadas e que o telefone é digitado quando o cliente senta.", 4],
-                  ["cartaz_titulo", "Título do cartaz", "Até 6 palavras. Todas as mesas leem.", 1],
-                  ["cartaz_linha", "Linha do cartaz", "Como usar: garantir a mesa pela mensagem e dizer o telefone ao sentar.", 2],
+                  ["script_garcom", "Script da conta", "Lido na hora da conta, só para quem a tela confirmou. Termine com \"Posso aplicar?\".", 3],
+                  ["mensagem_equipe", "Mensagem para a equipe", "Vai para o grupo da equipe. Explique a chegada e a conta, e que só tem desconto quem aparece na tela.", 4],
+                  ["cartaz_titulo", "Título do aviso na entrada", "Até 6 palavras, sem falar em desconto. Todo mundo lê.", 1],
+                  ["cartaz_linha", "Linha do aviso na entrada", "Quem recebeu a mensagem avisa na chegada.", 2],
                 ] as const
               ).map(([campo, rotulo, ajuda, linhas]) => (
                 <label key={campo} className="campo">
@@ -220,7 +220,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
               <>
                 <blockquote className="kit-script">{mostrarMarcador(kit.script_garcom)}</blockquote>
                 <p className="legenda">
-                  Só para quem tem desconto, depois que a tela confirmar · cerca de {segundosDeFala(kit.script_garcom)} s de fala
+                  Na hora da conta, só para quem a tela confirmou. Na chegada, a tela do salão mostra uma fala pronta · cerca de {segundosDeFala(kit.script_garcom)} s de fala
                 </p>
               </>
             )}
