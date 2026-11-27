@@ -36,7 +36,7 @@ telefone e resgate), resultado por campanha, painel "Telefones de teste",
 editor de regras, planejador de campanhas com IA (três alternativas, editor
 restrito ao cardápio, prévia ao vivo), kit de ativação gerado por IA, métricas
 de incremental × canibalizado, grupo de controle (efeito medido), projeção de
-retorno antes de aprovar, segmento "mesma cozinha na região" (clientes iFood de
+retorno antes de aprovar, segmento "Pede italiana em outros restaurantes e nunca veio" (`cozinha_similar`) (clientes iFood de
 outros restaurantes, anônimos para o restaurante), campanhas de 1 a 4 semanas com
 pausa automática por ocupação, cadeiras-hora recuperadas e a página pública de
 diagnóstico para captar restaurantes novos (`/diagnostico`, grava em `leads`).
@@ -114,7 +114,8 @@ app/
   diagnostico/page.tsx   página pública de diagnóstico para restaurantes novos
 components/
   BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx,
-  KitAtivacao.tsx, BotaoSimularCheia.tsx, Diagnostico.tsx   componentes de cliente
+  KitAtivacao.tsx, BotaoSimularCheia.tsx, Diagnostico.tsx,
+  CopiarTelefone.tsx     componentes de cliente
   Info.tsx               ícone "i" com explicação (sem estado)
   Projecao.tsx           quadro de retorno esperado (sem estado)
   Tentativas.tsx         lista de tentativas do modelo (sem estado)
@@ -132,6 +133,7 @@ lib/
   llm.ts                 gerarJson para Groq, Grok ou Gemini, diagnóstico ("server-only")
   kit-regras.ts          validação e template do kit, conferência de números (puro)
   kit.ts                 gerarKit, carregarKits, marcarKitEntregue ("server-only")
+  copiar.ts              copiar para a área de transferência (navegador)
   numero.ts              lerNumeroBR, formatarNumeroBR, lerCampoNumero (puro)
   projecao.ts            taxas por segmento e projeção de retorno (puro)
   controle.ts            sorteio e medição do grupo de controle (puro)
@@ -230,6 +232,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   Telefone que não existe no banco é `nenhum`, igual a cliente sem benefício.
   Telefone sempre mascarado (`mascararTelefone`, formato `(11) 9••••-••41`).
   O telefone viaja em corpo de POST, nunca em URL.
+  Além do teclado, o salão aceita telefone colado (botão "Colar telefone" ou
+  Ctrl+V) e teclado físico; tira o 55 do país. Os telefones de teste têm botão
+  de copiar. Copiar e colar é o caminho da demo, já que URL com telefone é proibida.
 - **Telefones de teste** (painel do dono) são regenerados do seed em memória
   (`gerarClientesCompletos`); o banco continua só com hash e 4 últimos
   dígitos. Os telefones do seed não dependem da data.
@@ -298,7 +303,13 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   carregamento de página. Validação (`validarKit`): 4 campos de texto não
   vazios, `script_garcom` ≤ 45 palavras, `cartaz_titulo` ≤ 6 palavras, e
   `conferirNumeros`: todo "N%" ou "R$ N" escrito tem de ser o benefício da
-  campanha (o garçom lê em voz alta). Falhou: mais uma tentativa com os erros;
+  campanha (o garçom lê em voz alta); e `conferirEspecifico`: nenhuma frase de
+  `FRASES_GENERICAS` ("benefício da casa", "aproveite"...), a mensagem da equipe
+  cita o dia e a hora de início, e o único marcador é `{nome}`, só no script e
+  só se `publico.usar_nome` (não vale para `cozinha_similar`). A entrada leva
+  `publico` (`publicoDoSegmento`: quem é o cliente e como falar com ele), montada
+  por `entradaKit`. O salão troca `{nome}` pelo primeiro nome (`aplicarNome`, no
+  servidor); o painel mostra "[nome do cliente]". O template também é por público. Falhou: mais uma tentativa com os erros;
   falhou de novo: `kitTemplate`, `modelo` = null. `gerarKit` nunca lança: a
   campanha não quebra por causa do kit. Nome e cozinha do restaurante entram
   no prompt como dados não confiáveis; a saída só é exibida, não toca valor,
@@ -344,7 +355,9 @@ supabase/schema.sql      colar no SQL Editor do Supabase
 - **Cadeiras-hora recuperadas** = soma de `resgates.pessoas` dos resgates
   incrementais × 1h30 (`PERMANENCIA_H`), nos últimos 30 dias, comparada às
   cadeiras-hora vazias. O salão pergunta quantas pessoas estão na mesa (padrão 2).
-- **Diagnóstico de captação** (`/diagnostico`): o dono marca cada turno como
+- **Diagnóstico de captação** (`/diagnostico`): abre com a promessa "Você só
+  paga pelo cliente que nunca veio" (cobrança por cliente novo, medido contra o
+  controle). Depois, o dono marca cada turno como
   cheio (90%), médio (60%) ou vazio (35%); a conta (`diagnosticar`) dá
   cadeiras-hora vazias por mês e quanto 5% de recuperação dos turnos vazios
   renderia. O interesse vai para `leads`, com o resultado recalculado no servidor.

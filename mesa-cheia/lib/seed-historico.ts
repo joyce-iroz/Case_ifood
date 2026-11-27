@@ -3,8 +3,7 @@
 // (quem já vinha às terças: tudo canibalizado). Puro: gera linhas, a rota grava.
 import { calcularDesconto, textoBeneficio, type PropostaCampanha } from "./campanha";
 import { instanteNoFuso, somarDias, timeDaHora } from "./dominio";
-import { janelaNatural, kitTemplate } from "./kit-regras";
-import { rotuloSegmento } from "./segmentos";
+import { entradaKit, kitTemplate } from "./kit-regras";
 import { REGRAS_DEMO, RESTAURANTE_DEMO, mulberry32, ultimaOcorrencia, type ClienteGerado } from "./seed";
 
 type ClienteComId = ClienteGerado & { id: string };
@@ -112,12 +111,13 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
       visitasNovas.push({ cliente_id: c.id, data, hora });
     });
 
-    const textos = kitTemplate({
-      restaurante: { nome: RESTAURANTE_DEMO.nome, cozinha: RESTAURANTE_DEMO.cozinha, ticket_medio: RESTAURANTE_DEMO.ticket_medio },
-      janela: janelaNatural(p.dia_semana, p.hora_inicio, p.hora_fim),
-      beneficio: textoBeneficio(p.tipo, p.valor),
-      segmento: rotuloSegmento(p.segmento),
-    });
+    const textos = kitTemplate(
+      entradaKit(
+        { nome: RESTAURANTE_DEMO.nome, cozinha: RESTAURANTE_DEMO.cozinha, ticket_medio: RESTAURANTE_DEMO.ticket_medio },
+        p,
+        textoBeneficio(p.tipo, p.valor),
+      ),
+    );
     kits.push({
       campanha_id: campanhaId,
       ...textos,

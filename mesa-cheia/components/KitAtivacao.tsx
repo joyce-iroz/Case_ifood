@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { contarPalavras, segundosDeFala } from "@/lib/kit-regras";
+import { contarPalavras, mostrarMarcador, segundosDeFala } from "@/lib/kit-regras";
 import type { Kit } from "@/lib/kit";
+import { copiar } from "@/lib/copiar";
 
 export type ItemKit = { campanhaId: string; rotulo: string; beneficio: string; kit: Kit | null };
 
@@ -22,23 +23,6 @@ const dataHora = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-async function copiar(texto: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(texto);
-    return true;
-  } catch {
-    const area = document.createElement("textarea");
-    area.value = texto;
-    area.style.position = "fixed";
-    area.style.opacity = "0";
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand("copy");
-    area.remove();
-    return ok;
-  }
-}
-
 export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
   const router = useRouter();
   const [sel, setSel] = useState(0);
@@ -50,7 +34,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
   async function copiarAba(qual: Aba) {
     if (!kit) return;
     const texto =
-      qual === "script" ? kit.script_garcom : qual === "equipe" ? kit.mensagem_equipe : `${kit.cartaz_titulo}\n${kit.cartaz_linha}`;
+      qual === "script" ? mostrarMarcador(kit.script_garcom) : qual === "equipe" ? kit.mensagem_equipe : `${kit.cartaz_titulo}\n${kit.cartaz_linha}`;
     const ok = await copiar(texto);
     if (!ok) return setAviso("Não consegui copiar. Selecione o texto e copie à mão.");
     if (qual === "equipe") {
@@ -85,7 +69,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
             {kit.modelo ? (
               <span className="selo">texto do modelo · {kit.modelo}</span>
             ) : (
-              <span className="selo selo-demo">texto de template fixo: o modelo não respondeu</span>
+              <span className="selo selo-demo">texto fixo deste público: o modelo falhou ou escreveu algo genérico</span>
             )}
             {kit.entregue_em && (
               <span className="selo selo-resgatado">entregue à equipe em {dataHora.format(new Date(kit.entregue_em))}</span>
@@ -111,7 +95,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
           <div className="kit-painel" role="tabpanel" id={`painel-${aba}`} aria-labelledby={`aba-${aba}`}>
             {aba === "script" && (
               <>
-                <blockquote className="kit-script">{kit.script_garcom}</blockquote>
+                <blockquote className="kit-script">{mostrarMarcador(kit.script_garcom)}</blockquote>
                 <p className="legenda">
                   {contarPalavras(kit.script_garcom)} palavras · cerca de {segundosDeFala(kit.script_garcom)} s de fala
                 </p>

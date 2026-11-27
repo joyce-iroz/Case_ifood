@@ -4,6 +4,7 @@ import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
 import { FormCampanha } from "@/components/FormCampanha";
 import { FormRegras } from "@/components/FormRegras";
+import { CopiarTelefone } from "@/components/CopiarTelefone";
 import { KitAtivacao } from "@/components/KitAtivacao";
 import { BotaoSimularCheia } from "@/components/BotaoSimularCheia";
 import { Planejador } from "@/components/Planejador";
@@ -637,8 +638,8 @@ function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[
       <div className="demo-corpo">
         <p className="legenda">
           Só existe para a apresentação. O banco guarda apenas o hash do telefone; estes números completos são
-          regenerados a partir do seed. Digite um deles na <Link href="/salao">tela do salão</Link>. Qualquer número
-          fora da lista mostra a resposta “sem benefício”.
+          regenerados a partir do seed. Copie um deles e cole na <Link href="/salao">tela do salão</Link> (botão “Colar
+          telefone” ou Ctrl+V). Qualquer número fora da lista mostra a resposta “sem benefício”.
         </p>
         <h3 className="demo-sub">Com benefício ativo</h3>
         {telefones.length === 0 ? (
@@ -647,7 +648,10 @@ function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[
           <ul className="lista-telefones">
             {telefones.map((t) => (
               <li key={t.telefone}>
-                <span className="telefone">{t.telefone}</span>
+                <span className="telefone-linha">
+                  <span className="telefone">{t.telefone}</span>
+                  <CopiarTelefone telefone={t.telefone} />
+                </span>
                 <span>{t.nome}</span>
                 <span className="sub">
                   {descricaoCampanha(t.campanha)} · deve sair{" "}
@@ -663,7 +667,10 @@ function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[
             <ul className="lista-telefones">
               {jaResgataram.map((t) => (
                 <li key={t.telefone}>
+                  <span className="telefone-linha">
                   <span className="telefone">{t.telefone}</span>
+                  <CopiarTelefone telefone={t.telefone} />
+                </span>
                   <span>{t.nome}</span>
                   <span className="sub">
                     {descricaoCampanha(t.campanha)} · {formatarDataCurta(t.campanha.data_janela)} · conta{" "}

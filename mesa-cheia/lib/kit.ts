@@ -9,7 +9,7 @@ import "server-only";
 // antes de copiar.
 import { supabaseServidor } from "./supabase/server";
 import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
-import { kitTemplate, validarKit, type BeneficioKit, type EntradaKit, type TextosKit } from "./kit-regras";
+import { FRASES_GENERICAS, kitTemplate, validarKit, type BeneficioKit, type EntradaKit, type TextosKit } from "./kit-regras";
 
 const INSTRUCAO_KIT = `Você escreve textos curtos para a equipe de um restaurante divulgar uma campanha.
 Você só escreve texto. Não invente valores, datas, horários, prazos ou condições além dos que estão em "dados".
@@ -18,9 +18,16 @@ O benefício vale só para os clientes que receberam a oferta; nenhum texto pode
 Quem digita o telefone é o atendente, na tela do salão; o cliente só informa o número em voz alta. Não mencione tablet, aplicativo do cliente nem cupom.
 Se citar o benefício com número, use exatamente o de "beneficio"; não escreva nenhum outro percentual ou valor em R$.
 
+O texto tem de ser desta campanha, não de uma qualquer:
+- "publico.quem" diz quem é o cliente que vai ouvir o script; "publico.abordagem" diz como falar com ele. O script parte dessa situação (primeira vez no salão, volta depois de meses, freguês daquele dia...).
+- Se "publico.usar_nome" for true, o script pode começar com o marcador {nome}, que a tela troca pelo primeiro nome do cliente. É o único marcador permitido, e só no script. Se for false, não use {nome}.
+- Não use frases de propaganda que serviriam para qualquer restaurante: ${FRASES_GENERICAS.map((f) => `"${f}"`).join(", ")}.
+- mensagem_equipe cita o dia ("dados.dia") e o horário de início ("dados.hora_inicio") escritos do mesmo jeito, e diz em poucas palavras quem recebeu a oferta.
+- cartaz_titulo fala com esse público (ex.: quem nunca sentou no salão), não com todo mundo.
+
 Responda só com um objeto JSON, sem texto fora dele, com exatamente estas chaves:
 - script_garcom: o que o atendente fala ao fechar a conta de um cliente que tem o benefício. No máximo 45 palavras, tom falado, sem jargão de marketing.
-- mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício) e do que fazer: no fechamento da conta, digitar o telefone do cliente na tela do salão e, se aparecer benefício, aplicar. Tom de recado interno.
+- mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício, quem recebeu) e do que fazer: no fechamento da conta, digitar o telefone do cliente na tela do salão e, se aparecer benefício, ler a frase da tela e aplicar. Tom de recado interno.
 - cartaz_titulo: chamada curta para cartaz de mesa, no máximo 6 palavras.
 - cartaz_linha: uma linha explicando como o cliente usa: informar o telefone ao garçom no fechamento da conta.
 Se a entrada tiver "erros_da_tentativa_anterior", corrija exatamente esses pontos.`;
@@ -47,7 +54,7 @@ export async function gerarKit(
         JSON.stringify(erros.length ? { dados: entrada, erros_da_tentativa_anterior: erros } : { dados: entrada }),
         15_000,
       );
-      const v = validarKit(resposta, beneficio);
+      const v = validarKit(resposta, beneficio, entrada);
       if (v.ok) {
         textos = v.kit;
         modelo = modeloConfigurado();

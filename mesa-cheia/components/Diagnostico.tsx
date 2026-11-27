@@ -198,7 +198,7 @@ export function Diagnostico() {
               {enviando ? "Enviando…" : "Quero o Mesa Cheia"}
             </button>
             {envio && <p className={envio.ok ? "sucesso" : "erro"}>{envio.texto}</p>}
-            <p className="legenda">Você só paga pelo cliente que não viria de qualquer jeito.</p>
+            <p className="legenda">Você só paga pelo cliente que nunca veio. Quem já vinha não entra na conta.</p>
           </form>
         </section>
       </div>

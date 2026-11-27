@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { calcularDesconto } from "@/lib/campanha";
 import { FUSO, formatarMoeda } from "@/lib/dominio";
 import { mascararTelefone } from "@/lib/telefone";
@@ -54,8 +54,56 @@ export function Salao() {
     if (novo.length === 11) consultar(novo);
   }
 
+  /** Telefone colado ou digitado no teclado físico: fica só com os dígitos, sem o 55 do país. */
+  function receber(texto: string) {
+    if (estado.fase !== "digitando" && estado.fase !== "falha") return false;
+    let d = texto.replace(/\D/g, "");
+    if (d.length >= 12 && d.startsWith("55")) d = d.slice(2);
+    if (!d) return false;
+    d = d.slice(0, 11);
+    setDigitos(d);
+    if (d.length === 11) consultar(d);
+    return true;
+  }
+
+  const [colando, setColando] = useState(false);
+  async function colar() {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (receber(t)) return;
+    } catch {
+      /* navegador sem permissão de leitura: mostra o campo para colar à mão */
+    }
+    setColando(true);
+  }
+
+  // Ctrl+V e teclado físico funcionam na tela inteira, para testar no computador.
+  const receberRef = useRef(receber);
+  receberRef.current = receber;
+  const teclaRef = useRef(tecla);
+  teclaRef.current = tecla;
+  useEffect(() => {
+    function aoColar(e: ClipboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      const t = e.clipboardData?.getData("text") ?? "";
+      if (receberRef.current(t)) e.preventDefault();
+    }
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (/^\d$/.test(e.key)) teclaRef.current(e.key);
+      else if (e.key === "Backspace") teclaRef.current("apagar");
+    }
+    document.addEventListener("paste", aoColar);
+    document.addEventListener("keydown", aoTeclar);
+    return () => {
+      document.removeEventListener("paste", aoColar);
+      document.removeEventListener("keydown", aoTeclar);
+    };
+  }, []);
+
   function novoAtendimento() {
     setDigitos("");
+    setColando(false);
     setEstado({ fase: "digitando" });
   }
 
@@ -133,6 +181,27 @@ export function Salao() {
       {!emResposta && (
         <>
           <div className="espaco" />
+          {colando ? (
+            <label className="campo-colar">
+              <span>Cole o telefone aqui</span>
+              <input
+                inputMode="tel"
+                autoFocus
+                placeholder="(11) 98765-4321"
+                onPaste={(e) => {
+                  e.preventDefault();
+                  if (receber(e.clipboardData.getData("text"))) setColando(false);
+                }}
+                onChange={(e) => {
+                  if (e.target.value.replace(/\D/g, "").length >= 11 && receber(e.target.value)) setColando(false);
+                }}
+              />
+            </label>
+          ) : (
+            <button type="button" className="botao-colar" onClick={colar} disabled={estado.fase === "consultando"}>
+              Colar telefone
+            </button>
+          )}
           <Teclado aoTeclar={tecla} desativado={estado.fase === "consultando"} />
         </>
       )}

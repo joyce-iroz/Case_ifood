@@ -7,7 +7,7 @@ export const SEGMENTOS = [
   { id: "frequenta_outras", rotulo: "Vem, mas em outros horários" },
   { id: "delivery_nunca_veio", rotulo: "Pede delivery e nunca veio ao salão" },
   { id: "sumiu_60_dias", rotulo: "Não aparece há mais de 60 dias" },
-  { id: "cozinha_similar", rotulo: "Pede a mesma cozinha em outros restaurantes da região" },
+  { id: "cozinha_similar", rotulo: "Pede italiana em outros restaurantes e nunca veio" },
 ] as const;
 
 export type Segmento = (typeof SEGMENTOS)[number]["id"];
@@ -50,7 +50,7 @@ export function classificarCliente(
   if (visitas.some((v) => recente(v, hoje))) return "frequenta_outras";
   if (visitas.length > 0) return "sumiu_60_dias";
   if (origem === "delivery") return "delivery_nunca_veio";
-  // Cliente iFood que pede a mesma cozinha em outros restaurantes perto e nunca veio aqui.
+  // Cliente iFood que pede comida italiana em outros restaurantes perto (até 3 km) e nunca veio aqui.
   // O critério (2+ pedidos em 60 dias, até 3 km) é aplicado na origem do dado.
   if (origem === "regiao") return "cozinha_similar";
   return null;

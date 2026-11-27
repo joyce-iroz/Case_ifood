@@ -30,7 +30,7 @@ import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmen
 import { gerarKit } from "./kit";
 import { calcularTaxas, type Taxas } from "./projecao";
 import { medirControle, sortearControle } from "./controle";
-import { janelaNatural } from "./kit-regras";
+import { entradaKit } from "./kit-regras";
 import type { ResumoOcupacao } from "./ocupacao";
 
 /** Média das células da grade na janela, pesada pelo tempo de cada hora dentro dela. */
@@ -326,16 +326,15 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
 
   // Kit de ativação: uma vez, logo depois da emissão. gerarKit nunca lança; se tudo
   // falhar, a campanha segue criada e o painel mostra que ela está sem kit.
-  const kit = await gerarKit(campanha.id, {
-    restaurante: {
-      nome: ctx.restaurante.nome,
-      cozinha: ctx.restaurante.cozinha,
-      ticket_medio: ctx.restaurante.ticket_medio,
-    },
-    janela: janelaNatural(p.dia_semana, p.hora_inicio, p.hora_fim, p.semanas),
-    beneficio: textoBeneficio(p.tipo, p.valor),
-    segmento: rotuloSegmento(p.segmento),
-  }, { tipo: p.tipo, valor: p.valor });
+  const kit = await gerarKit(
+    campanha.id,
+    entradaKit(
+      { nome: ctx.restaurante.nome, cozinha: ctx.restaurante.cozinha, ticket_medio: ctx.restaurante.ticket_medio },
+      p,
+      textoBeneficio(p.tipo, p.valor),
+    ),
+    { tipo: p.tipo, valor: p.valor },
+  );
 
   return {
     ok: true,

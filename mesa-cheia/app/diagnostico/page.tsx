@@ -16,11 +16,34 @@ export default function PaginaDiagnostico() {
         </div>
       </header>
       <main className="pagina diagnostico">
+        <section className="diag-promessa" aria-labelledby="t-promessa">
+          <h1 id="t-promessa">
+            Você só paga pelo cliente <span className="vermelho">que nunca veio.</span>
+          </h1>
+          <p>
+            O Mesa Cheia cobra por cliente novo sentado na mesa: quem pede seu delivery e nunca entrou no salão, quem
+            pede comida como a sua em outro restaurante da região, quem sumiu há meses. Cliente que já vinha naquele
+            horário não entra na conta.
+          </p>
+          <ul className="diag-provas">
+            <li>
+              <b>Medido, não estimado.</b> 20% dos clientes de cada campanha ficam sem a oferta. A diferença de visitas
+              entre os dois grupos é o que a campanha trouxe.
+            </li>
+            <li>
+              <b>Você põe o limite.</b> Teto de desconto por mês, desconto máximo por conta e ocupação mínima. Campanha
+              fora disso não sai.
+            </li>
+            <li>
+              <b>Para sozinha.</b> Se o horário encheu, a campanha pausa e os benefícios que sobraram expiram.
+            </li>
+          </ul>
+        </section>
         <div className="diagnostico-intro">
-          <h1>Quantas mesas o seu salão deixa vazias?</h1>
+          <h2>Quantas mesas o seu salão deixa vazias?</h2>
           <p className="legenda">
             Marque como costuma estar cada turno. Em um minuto você vê as cadeiras-hora vazias por mês e quanto daria
-            para recuperar trazendo clientes do iFood da sua região nos horários fracos.
+            para recuperar nos horários fracos.
           </p>
         </div>
         <Diagnostico />

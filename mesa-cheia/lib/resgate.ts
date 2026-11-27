@@ -1,6 +1,7 @@
 import "server-only";
 // Salão: consulta por telefone e resgate. Consulta direta ao banco, sem LLM.
 import { supabaseServidor } from "./supabase/server";
+import { aplicarNome } from "./kit-regras";
 import { carregarRegras, expirarVencidos, lerCampanha, lerResgate } from "./dados";
 import { RESTAURANTE_DEMO_ID, agoraNoFuso, formatarValidade, somarDias } from "./dominio";
 import { hashTelefone } from "./hash";
@@ -104,7 +105,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
       beneficio: textoBeneficio(c.tipo, c.valor),
       validade: formatarValidade(ocorrencias(c.data_janela, c.semanas), c.hora_inicio, c.hora_fim),
       antesDaJanela: new Date(b.valido_de).getTime() > agora,
-      script: kit.error ? null : (kit.data?.script_garcom ?? null),
+      script: kit.error || !kit.data?.script_garcom ? null : aplicarNome(kit.data.script_garcom, cliente.nome),
       calculo: { tipo: c.tipo, valor: c.valor, descontoMax: regras.desconto_max, tetoRestante: c.teto - gasto },
     };
   }
