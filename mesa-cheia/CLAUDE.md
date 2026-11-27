@@ -350,7 +350,14 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   incremental por segmento vêm das campanhas encerradas (`calcularTaxas`,
   mínimo de 20 emitidos / 3 resgates); sem isso, 8% de resgate e incremental
   pela definição do segmento (0 para `frequenta_janela`, 1 para os outros).
+  A taxa vale para um desconto de referência: o desconto típico (R$ numa conta de
+  ticket médio) das campanhas que formaram o histórico, ou 10% do ticket no padrão.
+  Premissa de desconto: a taxa acompanha a raiz da razão entre o desconto proposto
+  e o de referência (`ELASTICIDADE` 0,5; o dobro do desconto dá ~41% mais
+  resgates), limitada entre metade e o dobro.
   Premissa de semanas: cada semana extra soma metade da taxa, até dobrar.
+  O teto corta: resgates = mín(procura, teto ÷ desconto típico), porque depois do
+  teto o salão aplica desconto zero; a tela avisa quando o teto limita.
   Aparece na prévia do planejador e no formulário manual (mesma função).
 - **Segmento `cozinha_similar`** = clientes `origem = 'regiao'`: pedem a mesma
   cozinha em outros restaurantes (2+ vezes em 60 dias, até 3 km) e nunca

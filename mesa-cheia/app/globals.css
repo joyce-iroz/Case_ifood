@@ -739,3 +739,4 @@ code, .mono { font-family: var(--fonte-mono); }
 /* kit: botão do modelo, requisição separada da proposta */
 .kit-cabeca .botao-ia { margin-left: auto; min-height: 36px; }
 .kit-falha { margin: 0 0 12px; }
+.projecao-teto { margin: 10px 0 0; }

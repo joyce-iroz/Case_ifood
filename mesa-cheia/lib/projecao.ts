@@ -17,11 +17,30 @@ const MIN_RESGATES = 3;
  */
 const incrementalPadrao = (s: Segmento) => (s === "frequenta_janela" ? 0 : 1);
 
-export type Taxa = { resgate: number; incremental: number; base: "historico" | "padrao"; emitidos: number };
+/**
+ * Sem histórico, a taxa padrão vale para um desconto de 10% do ticket médio.
+ * Com histórico, vale para o desconto típico que aquelas campanhas deram.
+ */
+export const DESCONTO_REF_PADRAO_PCT = 10;
+/**
+ * Premissa de sensibilidade ao desconto: a taxa de resgate muda com a raiz da razão
+ * entre o desconto proposto e o de referência. O dobro do desconto traz ~41% mais
+ * resgates, metade traz ~29% menos. Conservadora de propósito; limitada entre metade
+ * e o dobro da taxa de referência.
+ */
+export const ELASTICIDADE = 0.5;
+
+export type Taxa = {
+  resgate: number;
+  incremental: number;
+  base: "historico" | "padrao";
+  emitidos: number;
+  descontoRef: number | null; // R$ por conta de ticket médio no histórico; null = padrão
+};
 export type Taxas = Record<Segmento, Taxa>;
 
 export function calcularTaxas(
-  encerradas: { segmento: Segmento; emitidos: number; resgates: number; incrementais: number }[],
+  encerradas: { segmento: Segmento; emitidos: number; resgates: number; incrementais: number; descontoTipico: number }[],
 ): Taxas {
   const t = {} as Taxas;
   for (const { id } of SEGMENTOS) {
@@ -35,6 +54,8 @@ export function calcularTaxas(
       incremental: resgates >= MIN_RESGATES ? inc / resgates : incrementalPadrao(id),
       base: temHistorico ? "historico" : "padrao",
       emitidos,
+      // Desconto de referência: média dos descontos típicos, pesada pelos emitidos.
+      descontoRef: temHistorico ? r2(cs.reduce((a, c) => a + c.descontoTipico * c.emitidos, 0) / emitidos) : null,
     };
   }
   return t;
@@ -52,7 +73,12 @@ export type Projecao = {
   taxaResgate: number;
   taxaIncremental: number;
   semanas: number;
-  taxaBase: number; // taxa de resgate de uma semana, antes da premissa das semanas extras
+  taxaBase: number; // taxa de resgate de uma semana, já ajustada pelo desconto
+  taxaReferencia: number; // taxa do histórico (ou padrão), no desconto de referência
+  descontoRef: number; // R$ por conta a que a taxa de referência corresponde
+  demanda: number; // resgates esperados se o teto não acabasse
+  cabeNoTeto: number; // quantos descontos típicos o teto paga
+  limitadoPeloTeto: boolean;
 };
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -75,11 +101,18 @@ export function projetar(p: {
 }): Projecao {
   // Um benefício só pode ser resgatado uma vez, então mais semanas não multiplicam resgates;
   // dão mais chances. Premissa: cada semana extra soma metade da taxa da primeira, até dobrar.
-  const fatorSemanas = Math.min(2, 1 + 0.5 * (p.semanas - 1));
-  const taxaResgate = Math.min(1, p.taxa.resgate * fatorSemanas);
-  const resgates = Math.round(p.emitidos * taxaResgate);
-  const incrementais = Math.round(resgates * p.taxa.incremental);
   const descontoMedio = descontoTipico(p.tipo, p.valor, p.ticketMedio, p.descontoMax);
+  const descontoRef = p.taxa.descontoRef ?? r2((p.ticketMedio * DESCONTO_REF_PADRAO_PCT) / 100);
+  const fatorDesconto =
+    descontoRef > 0 && descontoMedio > 0 ? Math.min(2, Math.max(0.5, (descontoMedio / descontoRef) ** ELASTICIDADE)) : 1;
+  const taxaBase = Math.min(1, p.taxa.resgate * fatorDesconto);
+  const fatorSemanas = Math.min(2, 1 + 0.5 * (p.semanas - 1));
+  const taxaResgate = Math.min(1, taxaBase * fatorSemanas);
+  const demanda = Math.round(p.emitidos * taxaResgate);
+  // O teto acaba: depois dele o salão aplica desconto zero, então ninguém mais resgata.
+  const cabeNoTeto = descontoMedio > 0 ? Math.floor(p.teto / descontoMedio + 1e-9) : demanda;
+  const resgates = Math.min(demanda, cabeNoTeto);
+  const incrementais = Math.round(resgates * p.taxa.incremental);
   const custo = r2(Math.min(p.teto, resgates * descontoMedio));
   // Receita nova = contas dos incrementais menos o desconto dado a eles.
   const custoUnit = resgates ? custo / resgates : 0;
@@ -96,6 +129,11 @@ export function projetar(p: {
     taxaResgate,
     taxaIncremental: p.taxa.incremental,
     semanas: p.semanas,
-    taxaBase: p.taxa.resgate,
+    taxaBase,
+    taxaReferencia: p.taxa.resgate,
+    descontoRef,
+    demanda,
+    cabeNoTeto,
+    limitadoPeloTeto: demanda > cabeNoTeto,
   };
 }

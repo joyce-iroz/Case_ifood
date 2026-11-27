@@ -28,7 +28,7 @@ import {
 } from "./campanha";
 import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmento } from "./segmentos";
 import { gravarKitTemplate } from "./kit";
-import { calcularTaxas, type Taxas } from "./projecao";
+import { calcularTaxas, descontoTipico, type Taxas } from "./projecao";
 import { medirControle, sortearControle } from "./controle";
 import { entradaKit } from "./kit-regras";
 import type { ResumoOcupacao } from "./ocupacao";
@@ -97,6 +97,7 @@ export async function carregarBase(id = RESTAURANTE_DEMO_ID) {
         emitidos: emitidosPor.get(c.id) ?? 0,
         resgates: resgatesPor.get(c.id)?.n ?? 0,
         incrementais: resgatesPor.get(c.id)?.inc ?? 0,
+        descontoTipico: descontoTipico(c.tipo, c.valor, restaurante.ticket_medio, regras.desconto_max),
       })),
   );
 
