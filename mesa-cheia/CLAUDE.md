@@ -113,14 +113,13 @@ app/
   api/kits/[campanhaId]/escrever POST: o modelo escreve o kit (requisição própria)
   api/regras             GET / PATCH
   api/ocupacao/registrar POST {data, hora, pessoas}: o que um caixa enviaria; confere pausas
-  api/campanhas/[id]/simular-cheia  POST (DEMO): 85% na 1ª ocorrência, para mostrar a pausa
   api/leads              POST: restaurante interessado (diagnóstico recalculado no servidor)
   api/oferta/[token]/confirmar  POST: cliente garante a mesa (guarda a vaga)
   oferta/[token]/page.tsx       o que o cliente vê pelo link da oferta
   diagnostico/page.tsx   página pública de diagnóstico para restaurantes novos
 components/
   BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx,
-  KitAtivacao.tsx, BotaoSimularCheia.tsx, Diagnostico.tsx,
+  KitAtivacao.tsx, Diagnostico.tsx,
   CopiarTelefone.tsx, BotaoGarantir.tsx   componentes de cliente
   Info.tsx               ícone "i" com explicação (sem estado)
   Projecao.tsx           quadro de retorno esperado (sem estado)
@@ -147,7 +146,7 @@ lib/
   projecao.ts            taxas por segmento e projeção de retorno (puro)
   controle.ts            sorteio e medição do grupo de controle (puro)
   diagnostico.ts         conta da página de diagnóstico (puro)
-  pausa.ts               verificarPausas, registrarOcupacao, simular ("server-only")
+  pausa.ts               verificarPausas, registrarOcupacao ("server-only")
   leads.ts               salvarLead ("server-only")
   seed-historico.ts      campanhas antigas com resgates e controle (puro)
   segmentos.ts           segmentos e visitouNaJanela (puro)

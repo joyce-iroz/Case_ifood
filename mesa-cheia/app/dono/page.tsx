@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
-const VERSAO = "27/11 · público sem oferta disponível explicado";
+const VERSAO = "27/11 · sem o botão de simular";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
@@ -9,7 +9,6 @@ import { FormCampanha } from "@/components/FormCampanha";
 import { FormRegras } from "@/components/FormRegras";
 import { CopiarTelefone } from "@/components/CopiarTelefone";
 import { KitAtivacao } from "@/components/KitAtivacao";
-import { BotaoSimularCheia } from "@/components/BotaoSimularCheia";
 import { Planejador } from "@/components/Planejador";
 import { Tentativas } from "@/components/Tentativas";
 import { Info } from "@/components/Info";
@@ -525,12 +524,6 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
           )}
         </div>
       </div>
-
-      {ativa && (
-        <div className="campanha-acoes">
-          <BotaoSimularCheia campanhaId={c.id} />
-        </div>
-      )}
 
       <details className="recolhivel">
         <summary>

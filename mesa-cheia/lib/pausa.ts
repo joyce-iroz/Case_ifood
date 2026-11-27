@@ -97,22 +97,3 @@ async function gravarOcupacao(id: string, linhas: { data: string; hora: number; 
   const ins = await db.from("ocupacao").insert(linhas.map((l) => ({ restaurante_id: id, ...l })));
   if (ins.error) throw ins.error;
 }
-
-/**
- * DEMO: registra a primeira ocorrência da campanha com 85% de ocupação, como se o
- * caixa tivesse enviado, para mostrar a pausa automática acontecendo.
- */
-export async function simularOcorrenciaCheia(campanhaId: string, id = RESTAURANTE_DEMO_ID) {
-  if (!/^[0-9a-f-]{36}$/i.test(campanhaId)) throw new EntradaInvalidaError("Campanha inválida.");
-  const db = supabaseServidor();
-  const { data, error } = await db.from("campanhas").select(COLUNAS_CAMPANHA).eq("id", campanhaId).maybeSingle();
-  if (error) throw error;
-  if (!data) throw new EntradaInvalidaError("Campanha não encontrada.");
-  const c = lerCampanha(data as Record<string, unknown>);
-  const restaurante = await carregarRestaurante(id);
-  const pessoas = Math.round(restaurante.capacidade * 0.85);
-  const linhas = [];
-  for (let h = Math.floor(c.hora_inicio); h < Math.ceil(c.hora_fim); h++) linhas.push({ data: c.data_janela, hora: h, pessoas });
-  await gravarOcupacao(id, linhas);
-  return { ok: true, pausadas: await verificarPausas(id) };
-}
