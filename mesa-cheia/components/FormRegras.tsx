@@ -43,7 +43,7 @@ export function FormRegras({ regras }: { regras: Regras }) {
       if (!j.ok) throw new Error(j.erros?.join("; ") ?? j.erro ?? "Falha");
       const salvas = j.regras as Regras;
       setValores(Object.fromEntries(CAMPOS.map((c) => [c.k, formatarNumeroBR(salvas[c.k], c.casas)])));
-      setEstado({ ok: true, texto: "Regras salvas. Valem para o formulário e para o planejador." });
+      setEstado({ ok: true, texto: "Regras salvas." });
       router.refresh();
     } catch (err) {
       setEstado({ ok: false, texto: err instanceof Error ? err.message : "Falha" });

@@ -11,6 +11,7 @@ export const MAX_TENTATIVAS = 3;
 export const JANELAS_NO_CARDAPIO = 12;
 export const VALOR_FALLBACK = 10; // % na regra fixa
 
+const NOMES_DIA_LONGO_TXT = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 export const DIAS_TEXTO = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"] as const;
 const TIPOS_SAIDA = { desconto_percentual: "percentual", desconto_valor: "valor_fixo" } as const;
 type TipoSaida = keyof typeof TIPOS_SAIDA;
@@ -401,11 +402,11 @@ export function propostaFallback(
     const custo = [...tetos].reverse().find((v) => v <= metade) ?? tetos[0];
     const inicio = lerHHMM(j.hora_inicio)!;
     const fim = lerHHMM(j.hora_fim)!;
-    const ocup = String(j.ocupacao_media_pct).replace(".", ",");
+    const ocup = String(Math.round(j.ocupacao_media_pct)).replace(".", ",");
     return {
       notas,
       saida: {
-        aposta: "regra fixa",
+        aposta: "horário mais vazio",
         dia_semana: j.dia_semana,
         hora_inicio: j.hora_inicio,
         hora_fim: j.hora_fim,
@@ -415,8 +416,8 @@ export function propostaFallback(
         clientes_alvo: elegiveis,
         custo_maximo: custo,
         justificativa:
-          `Proposta montada por regra fixa, sem o modelo. ${pulou ? "Entre as combinações ainda não mostradas, " : ""}${j.dia_semana} ${formatarHora(inicio)}–${formatarHora(fim)} é a janela com mais cadeiras vazias ` +
-          `(${String(j.cadeiras_hora_vazias).replace(".", ",")} cadeiras-hora, ${ocup}% de ocupação média) e "${SEGMENTOS.find((s) => s.id === segmento)!.rotulo.toLowerCase()}" é o segmento com mais clientes elegíveis nela (${elegiveis}).`,
+          `${pulou ? "Entre as opções ainda não mostradas, " : ""}${NOMES_DIA_LONGO_TXT[DIAS_TEXTO.indexOf(j.dia_semana)]} ${formatarHora(inicio)}–${formatarHora(fim)} é o horário mais vazio ` +
+          `(${ocup}% ocupado) e "${SEGMENTOS.find((s) => s.id === segmento)!.rotulo.toLowerCase()}" é o público com mais clientes nele (${elegiveis}).`,
       },
       proposta: {
         dia_semana: DIAS_TEXTO.indexOf(j.dia_semana),

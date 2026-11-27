@@ -9,7 +9,7 @@ export default function Inicio() {
       <div>
         <Marca tamanho={32} />
         <h1>Cantina do Bairro</h1>
-        <p className="legenda">Escolha como você vai usar o app agora.</p>
+        <p className="legenda">Quem está usando?</p>
       </div>
       <div className="papeis">
         <Link href="/dono" className="papel">
@@ -35,18 +35,6 @@ export default function Inicio() {
             <p>Digitar o telefone do cliente e aplicar o benefício na conta.</p>
           </div>
           <span className="chamada">Abrir teclado →</span>
-        </Link>
-        <Link href="/diagnostico" className="papel papel-novo">
-          <div className="mini-grade" aria-hidden="true">
-            {MINI.slice(0, 6).map((c, i) => (
-              <span key={i} className={i % 2 ? "c-n1" : c} />
-            ))}
-          </div>
-          <div>
-            <strong>Tenho um restaurante</strong>
-            <p>Descobrir quantas mesas o seu salão deixa vazias e quanto daria para recuperar.</p>
-          </div>
-          <span className="chamada" style={{ color: "var(--vermelho)" }}>Fazer diagnóstico →</span>
         </Link>
       </div>
     </main>

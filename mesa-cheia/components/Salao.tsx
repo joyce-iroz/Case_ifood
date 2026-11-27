@@ -182,7 +182,7 @@ export function Salao() {
               <b>− {formatarMoeda(estado.r.desconto)}</b>
             </div>
           </div>
-          {!estado.r.novo && <p className="cartao-linha" style={{ color: "var(--verde-suave)" }}>Este resgate já estava registrado; nada foi duplicado.</p>}
+          {!estado.r.novo && <p className="cartao-linha" style={{ color: "var(--verde-suave)" }}>Já estava registrado; nada foi cobrado duas vezes.</p>}
         </div>
       )}
 

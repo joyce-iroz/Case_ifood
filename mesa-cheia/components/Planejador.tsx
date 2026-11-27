@@ -151,10 +151,7 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
       <div className="planejador-topo">
         <div>
           <h2 id="t-plan">Planejador</h2>
-          <p className="legenda">
-            O modelo propõe três alternativas escolhidas entre janelas, segmentos e valores que o código já calculou.
-            Você escolhe uma e pode ajustá-la, sempre dentro dessas mesmas opções.
-          </p>
+          <p className="legenda">Três sugestões para os horários mais vazios. Escolha uma e ajuste se quiser.</p>
         </div>
         <button className="botao primario" onClick={gerar} disabled={gerando}>
           {gerando ? "Gerando propostas…" : plano ? "Gerar outras propostas" : "Gerar proposta"}
@@ -165,12 +162,12 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
       {plano && (
         <>
           <div className="proposta-origem">
-            {plano.origem === "modelo" && <span className="selo">propostas do modelo · {plano.modelo}</span>}
+            {plano.origem === "modelo" && <span className="selo">sugestões da IA</span>}
             {plano.origem === "fallback" && (
               <span className="selo selo-demo">
                 {limiteAtingido(plano)
-                  ? "regra fixa: o limite por minuto do modelo acabou"
-                  : "regra fixa: nenhuma proposta do modelo passou na validação"}
+                  ? "sugestão automática: a IA atingiu o limite"
+                  : "sugestão automática: a IA não acertou as regras"}
               </span>
             )}
             {plano.origem === "nenhuma" && <span className="selo">sem janela candidata</span>}
@@ -183,8 +180,8 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
             <div className="aviso motivo-fallback">
               <b>
                 {limiteAtingido(plano)
-                  ? `O modelo não respondeu (tentativa ${plano.tentativas.at(-1)!.numero}): a cota por minuto do plano gratuito acabou. Espere cerca de 1 minuto e toque em gerar de novo.`
-                  : `Por que o modelo foi reprovado (tentativa ${plano.tentativas.at(-1)!.numero}):`}
+                  ? "A IA atingiu o limite por minuto. Espere 1 minuto e gere de novo."
+                  : "Por que as sugestões da IA foram recusadas:"}
               </b>
               <ul>
                 {plano.tentativas
@@ -215,7 +212,7 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
 
           {aguardando && edit && plano.cardapio && sel !== null && (
             <div className="editor">
-              <h3>Ajustar a alternativa “{plano.alternativas[sel].aposta}”</h3>
+              <h3>Ajustar “{plano.alternativas[sel].aposta}”</h3>
               <Editor cardapio={plano.cardapio} p={edit} aoMudar={setEdit} />
               <PreviaView previa={previa} carregando={carregandoPrevia} />
               <div className="proposta-acoes">
@@ -234,7 +231,7 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
 
           {aguardando && sel === null && plano.alternativas.length > 0 && (
             <div className="proposta-acoes">
-              <span className="legenda">Selecione uma alternativa para ajustar e aprovar.</span>
+              <span className="legenda">Escolha uma sugestão para aprovar.</span>
               <button className="botao" onClick={descartar}>
                 Descartar todas
               </button>
@@ -245,7 +242,7 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
 
           <details className="recolhivel">
             <summary>
-              Tentativas do modelo <span className="qtd">{plano.tentativas.length}</span>
+              Tentativas da IA <span className="qtd">{plano.tentativas.length}</span>
             </summary>
             <div className="rolagem">
               <Tentativas tentativas={plano.tentativas} />
@@ -301,10 +298,10 @@ function CartaoAlternativa({
       </div>
       <dl className="proposta-dados">
         <div>
-          <dt>Segmento</dt>
+          <dt>Público</dt>
           <dd>
             {a.segmentoRotulo}
-            <span className="legenda"> · {a.elegiveis} elegíveis</span>
+            <span className="legenda"> · {a.elegiveis} clientes</span>
           </dd>
         </div>
         <div>
@@ -312,7 +309,7 @@ function CartaoAlternativa({
           <dd>{a.beneficio}</dd>
         </div>
         <div>
-          <dt>Custo máximo</dt>
+          <dt>Gasto máximo</dt>
           <dd>{formatarMoeda(a.custoMaximo)}</dd>
         </div>
       </dl>
@@ -437,23 +434,23 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
               >
                 <b>{rotuloJanela(j)}</b>
                 <span>
-                  {num(Math.round(j.ocupacao_media_pct))}% ocupada · {num(Math.round(j.cadeiras_hora_vazias))} cad-h vazias
+                  {num(Math.round(j.ocupacao_media_pct))}% ocupada
                 </span>
               </button>
             );
           })}
         </div>
         <p className="legenda">
-          Só aparecem dias com janela de 1h ou mais abaixo de {num(cardapio.regras.ocupacao_min)}% de ocupação. Para outro dia,
-          use a <a href="/dono?aba=configurar#nova">campanha manual</a>.
+          Outros dias não têm horário abaixo de {num(cardapio.regras.ocupacao_min)}%. Para eles, use a{" "}
+          <a href="/dono?aba=configurar#nova">campanha manual</a>.
         </p>
       </fieldset>
       <label className="campo">
-        Segmento
+        Público
         <select value={p.segmento} onChange={(e) => aoMudar({ ...p, segmento: e.target.value as Segmento })}>
           {segmentos.map((s) => (
             <option key={s.id} value={s.id}>
-              {rotuloSegmento(s.id)} · {janela.segmentos[s.id].elegiveis} elegíveis
+              {rotuloSegmento(s.id)} · {janela.segmentos[s.id].elegiveis} clientes
             </option>
           ))}
         </select>
@@ -516,7 +513,7 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
           aria-valuetext={formatarMoeda(p.teto)}
         />
         <span className="legenda">
-          de {formatarMoeda(tetos[0] ?? 0)} a {formatarMoeda(tetos.at(-1) ?? 0)}, o saldo do mês nessa janela
+          até {formatarMoeda(tetos.at(-1) ?? 0)}, o que sobra no mês
         </span>
       </div>
     </div>
@@ -529,15 +526,15 @@ function PreviaView({ previa, carregando }: { previa: Previa | null; carregando:
   return (
     <div className={`previa ${carregando ? "carregando" : ""}`} aria-live="polite">
       <div>
-        <span>Clientes elegíveis</span>
+        <span>Clientes</span>
         <b>{previa.elegiveis ?? "—"}</b>
       </div>
       <div>
-        <span>Custo máximo projetado</span>
+        <span>Gasto máximo</span>
         <b>{previa.custoMaximo === null ? "—" : formatarMoeda(previa.custoMaximo)}</b>
       </div>
       <div>
-        <span>Saldo do teto {mes} depois</span>
+        <span>Sobra no mês {mes}</span>
         <b className={previa.saldoDepois !== null && previa.saldoDepois < 0 ? "alerta-texto" : undefined}>
           {previa.saldoDepois === null ? "—" : formatarMoeda(previa.saldoDepois)}
         </b>
@@ -567,16 +564,13 @@ function ResultadoAprovacao({ r }: { r: ResultadoCriacao }) {
   if (r.ok)
     return (
       <div className="sucesso">
-        <b>Campanha criada.</b> {r.emitidos} benefícios emitidos, válidos {r.validade}.
-        {r.controle > 0 && <> {r.controle} clientes sorteados para o grupo de controle.</>}
-        {r.foraPorIntervalo > 0 && <> {r.foraPorIntervalo} clientes ficaram de fora por oferta recente.</>}{" "}
+        <b>Campanha criada.</b> {r.emitidos} clientes recebem a oferta, válida {r.validade}.{" "}
         {r.kit.gerado ? (
           <>
-            O kit já está com o texto fixo deste público. Para o modelo escrever, toque em “Escrever com IA” na{" "}
-            <a href="/dono?aba=campanhas">aba Campanhas</a>: é outra chamada, separada da proposta.
+            Os textos para a equipe estão na <a href="/dono?aba=campanhas">aba Campanhas</a>.
           </>
         ) : (
-          "O kit de ativação não foi gravado; a campanha segue ativa."
+          "Os textos para a equipe não foram gravados; a campanha segue ativa."
         )}
       </div>
     );

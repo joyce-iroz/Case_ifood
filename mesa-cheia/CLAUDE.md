@@ -22,7 +22,9 @@ dirigidos a clientes específicos. Dois usuários:
 - o atendente de salão, que aplica o benefício na conta.
 
 Sem login e sem autenticação. A entrada do app (`/`) é um seletor de papel com
-"Sou o dono" (`/dono`) e "Sou o salão" (`/salao`).
+"Sou o dono" (`/dono`) e "Sou o salão" (`/salao`). A página de captação
+(`/diagnostico`) é para outros restaurantes: não aparece na entrada da Cantina
+e não tem link de volta para ela.
 
 A demo usa um único restaurante, "Cantina do Bairro" (italiana, 64 lugares,
 ticket médio R$ 78, terça a domingo, 11h–15h e 18h–23h), com id fixo
@@ -408,6 +410,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   janela preenchida (`janelaDaCelula`: horas vizinhas abaixo do mínimo no mesmo
   turno). No planejador, a alternativa de menor custo projetado por cliente
   novo ganha o selo "melhor retorno".
+- **Texto de interface curto e simples.** Uma frase por bloco, sem jargão
+  ("público", não "segmento"; "clientes novos", não "incrementais"; "para quem já
+  vinha", não "canibalizado"). Como a conta foi feita vai no ícone `Info`, não em
+  parágrafo. O modelo e as premissas ficam na aba Demo e no CLAUDE.md.
 - Identificadores de domínio em português, sem acento no código
   (`ocupacao`, `beneficio`); texto de interface em português com acento.
 - Schema mudou? Atualize `supabase/schema.sql` (ele derruba e recria tudo) e a
@@ -477,6 +483,10 @@ ao desenho original, necessárias para a demo.
 Índices: `(restaurante_id, data)`, `(cliente_id, data desc)`. Base dos
 segmentos e de `incremental`. O seed grava cerca de 2.600 visitas coerentes
 com `clientes.visitas` e `ultima_visita`; cada resgate grava mais uma.
+
+Ocupação do seed: terça e quarta fracas; quinta e domingo com jantar fraco
+(janelas de 18h30–20h e 21h–22h30 abaixo de 50%); sexta e sábado cheios. Assim o
+planejador oferece quatro dias.
 
 Seed: 60 de terça à noite, 120 de outras janelas (visita nos últimos 56 dias),
 150 só delivery (`visitas = 0`, `ultima_visita` null), 70 sumidos (última

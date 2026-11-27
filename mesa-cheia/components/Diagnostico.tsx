@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { NOMES_DIA, formatarMoeda, ordenarDiasSemana } from "@/lib/dominio";
 import { lerNumeroBR } from "@/lib/numero";
+import { Info } from "./Info";
 import {
   META_RECUPERACAO,
   OCUPACAO_NIVEL,
@@ -102,7 +103,7 @@ export function Diagnostico() {
         </div>
 
         <div className="campo" style={{ marginTop: 16 }}>
-          <span>Como costuma estar cada turno? Toque para trocar.</span>
+          <span>Toque para trocar.</span>
           <div className="rolagem">
             <table className="grade grade-diagnostico">
               <thead>
@@ -163,18 +164,17 @@ export function Diagnostico() {
                 </ul>
               </div>
               <div>
-                <span className="kpi-rotulo">Recuperando {Math.round(META_RECUPERACAO * 100)}% dos turnos vazios</span>
+                <span className="kpi-rotulo">
+                  Recuperando {Math.round(META_RECUPERACAO * 100)}% dos turnos vazios{" "}
+                  <Info
+                    texto={`Cheio = ${OCUPACAO_NIVEL.cheio * 100}%, médio = ${OCUPACAO_NIVEL.medio * 100}%, vazio = ${OCUPACAO_NIVEL.vazio * 100}% de ocupação; ${String(SEMANAS_MES).replace(".", ",")} semanas por mês; ${String(PERMANENCIA_H).replace(".", ",")}h por mesa; uma conta de ticket médio por cadeira recuperada.`}
+                  />
+                </span>
                 <span className="kpi-valor verde">{formatarMoeda(r.receitaMes)}</span>
                 <span className="kpi-nota">
                   por mês em contas novas · {fmt.format(r.recuperavelMes)} cadeiras-hora
                 </span>
               </div>
-              <p className="premissa">
-                Premissas: cheio = {OCUPACAO_NIVEL.cheio * 100}%, médio = {OCUPACAO_NIVEL.medio * 100}%, vazio ={" "}
-                {OCUPACAO_NIVEL.vazio * 100}% de ocupação; {String(SEMANAS_MES).replace(".", ",")} semanas por mês; cada
-                mesa fica {String(PERMANENCIA_H).replace(".", ",")}h; uma conta por cadeira recuperada, no ticket médio.
-                Com o Mesa Cheia, a grade sai do seu histórico real, não de estimativa.
-              </p>
             </div>
           )}
         </section>
@@ -198,7 +198,7 @@ export function Diagnostico() {
               {enviando ? "Enviando…" : "Quero o Mesa Cheia"}
             </button>
             {envio && <p className={envio.ok ? "sucesso" : "erro"}>{envio.texto}</p>}
-            <p className="legenda">Você só paga pelo cliente que nunca veio. Quem já vinha não entra na conta.</p>
+            
           </form>
         </section>
       </div>

@@ -109,7 +109,7 @@ function fatosDosSegmentos(base: Base): Record<Segmento, FatoSegmento> {
             s.id === "cozinha_similar" && r
               ? `pedem ${base.restaurante.cozinha} em outros restaurantes em média ${r.pedidosMedios} vezes em 60 dias, a ${r.distanciaMedia} km daqui, e nunca vieram`
               : s.id === "frequenta_janela"
-                ? "já vêm nesse horário: desconto para eles costuma ser canibalizado"
+                ? "já vêm nesse horário: o desconto vai para quem viria de qualquer jeito"
                 : null,
         },
       ];
@@ -149,11 +149,10 @@ function apresentar(
   const n = (v: number) => String(v).replace(".", ",");
   const fatos = [
     `${n(Math.round(j.ocupacao_media_pct))}% ocupada`,
-    `${n(Math.round(j.cadeiras_hora_vazias))} cadeiras-hora vazias por semana`,
-    `${elegiveis} elegíveis`,
-    f && `${n(f.taxa_resgate_pct)}% resgatam (${f.fonte_taxa === "historico" ? "histórico" : "padrão, sem histórico"})`,
+    `${elegiveis} clientes`,
+    f && `${n(f.taxa_resgate_pct)}% costumam usar${f.fonte_taxa === "historico" ? "" : " (estimativa)"}`,
     f?.efeito_medido_vs_controle_pts != null &&
-      `${f.efeito_medido_vs_controle_pts > 0 ? "+" : ""}${n(f.efeito_medido_vs_controle_pts)} pts vs controle em campanhas anteriores`,
+      `${f.efeito_medido_vs_controle_pts > 0 ? "+" : ""}${n(f.efeito_medido_vs_controle_pts)} pts de efeito medido antes`,
     f?.observacao,
   ]
     .filter(Boolean)

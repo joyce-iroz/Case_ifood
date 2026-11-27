@@ -164,10 +164,7 @@ export default async function Dono({ searchParams }: { searchParams: Promise<Bus
           <div className="duas-colunas">
             <section className="cartao-painel ocupacao" aria-labelledby="t-camp" id="nova">
               <h2 id="t-camp">Nova campanha manual</h2>
-              <p className="legenda" style={{ marginBottom: 16 }}>
-                Sem restrição de cardápio: serve para quem quer uma campanha fora das janelas que o planejador propõe.
-                Dica: clique numa célula da grade, na aba Hoje, para começar por ela.
-              </p>
+              <p className="legenda" style={{ marginBottom: 16 }}>Qualquer dia e horário.</p>
               <FormCampanha
                 key={`${form.janela.dia}-${form.janela.inicio}-${form.janela.fim}`}
                 dias={form.dias}
@@ -247,15 +244,14 @@ function Destaque({
             <span className="destaque-de">cadeiras-hora vazias</span>
           </div>
           <p className="destaque-linha">
-            <b>{fmt.format(fracas)}</b> delas nos horários abaixo de {fmt.format(regras.ocupacao_min)}% de ocupação, onde
-            dá para agir.
+            <b>{fmt.format(fracas)}</b> delas nos horários abaixo de {fmt.format(regras.ocupacao_min)}%.
           </p>
           <div className="destaque-dinheiro">
             <span className="destaque-dinheiro-valor">{reais(naoEntrou)}</span>
             <span>
-              em contas que não entraram nesses horários{" "}
+              que deixaram de entrar nesses horários{" "}
               <Info
-                texto={`Cadeiras-hora vazias nos horários fracos ÷ ${String(PERMANENCIA_H).replace(".", ",")}h de permanência × ticket médio de ${formatarMoeda(ticketMedio)}. É o teto do que dá para disputar, não uma previsão.`}
+                texto={`Cadeiras vazias nos horários fracos ÷ ${String(PERMANENCIA_H).replace(".", ",")}h por mesa × ticket médio de ${formatarMoeda(ticketMedio)}. É o máximo em jogo, não uma previsão.`}
               />
             </span>
           </div>
@@ -267,19 +263,18 @@ function Destaque({
             <span className="destaque-valor verde">{fmt.format(recuperadas)}</span>
             <span className="destaque-de">
               cadeiras-hora{" "}
-              <Info texto="Pessoas trazidas por resgates incrementais (clientes que não vinham nessa janela) × 1h30 de permanência média." />
+              <Info texto="Pessoas trazidas por clientes novos × 1h30 por mesa." />
             </span>
           </div>
           <div className="destaque-dinheiro">
             <span className="destaque-dinheiro-valor verde">{formatarMoeda(receitaNova)}</span>
-            <span>em contas de clientes novos, já descontado o benefício</span>
+            <span>em contas de clientes novos, já com desconto</span>
           </div>
           <div className="destaque-barra" role="img" aria-label={`${Math.round(progresso)}% da meta de ${fmt.format(meta)}`}>
             <span style={{ width: `${Math.max(progresso, recuperadas > 0 ? 2 : 0)}%` }} />
           </div>
           <span className="kpi-nota">
-            {Math.round(progresso)}% da meta de referência: recuperar {Math.round(META_RECUPERACAO * 100)}% das vazias dos
-            horários fracos ({fmt.format(meta)} cadeiras-hora)
+            {Math.round(progresso)}% da meta de {fmt.format(meta)} ({Math.round(META_RECUPERACAO * 100)}% das vazias nos horários fracos)
           </span>
         </div>
       </section>
@@ -314,7 +309,7 @@ function Destaque({
         <div className="mini-kpi">
           <span>
             Kit entregue à equipe{" "}
-            <Info texto="Campanhas em que o dono copiou a mensagem para a equipe. É a proxy do restaurante que divulga no salão." />
+            <Info texto="Campanhas em que você copiou a mensagem para a equipe." />
           </span>
           <b>
             {entregues} de {painel.length}
@@ -390,7 +385,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
             <div>
               <span>
                 Clientes novos{" "}
-                <Info texto="Resgates incrementais: o cliente não tinha visita naquela janela nos últimos 60 dias." />
+                <Info texto="Quem usou e não vinha nesse horário nos últimos 60 dias." />
               </span>
               <i className="funil-verde" style={{ width: largura(r.resgatesIncrementais) }} />
               <b className={r.resgatesIncrementais > 0 ? "verde" : undefined}>{r.resgatesIncrementais}</b>
@@ -401,7 +396,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
         <div className="campanha-bloco">
           <span className="bloco-titulo">
             Efeito vs controle{" "}
-            <Info texto="% de quem recebeu o benefício que veio na janela menos % do grupo sorteado para não receber que veio mesmo assim. É a medida do efeito real." />
+            <Info texto="Quantos vieram entre quem recebeu a oferta, comparado a um grupo sorteado que não recebeu." />
           </span>
           {k.estado === "sem_controle" && <p className="legenda">Campanha sem grupo de controle (menos de 10 elegíveis).</p>}
           {k.estado === "aguardando" && (
@@ -436,7 +431,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
           <span className="bloco-titulo">Dinheiro</span>
           <div className="dinheiro-linha">
             <span>
-              Receita de clientes novos <Info texto="Contas dos resgates incrementais, já descontado o benefício." />
+              Receita de clientes novos <Info texto="Contas dos clientes novos, já com desconto." />
             </span>
             <b className={r.receitaIncremental > 0 ? "verde" : undefined}>{formatarMoeda(r.receitaIncremental)}</b>
           </div>
@@ -460,7 +455,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
         <div className="campanha-bloco campanha-chave">
           <span className="bloco-titulo">
             Custo por cliente novo{" "}
-            <Info texto="Todo o desconto dado na campanha dividido pelos resgates incrementais." />
+            <Info texto="Todo o desconto dado, dividido pelos clientes novos." />
           </span>
           <b
             className={`chave-valor ${r.custoPorIncremental === null && r.resgatados > 0 ? "alerta-texto chave-texto" : ""}`}
@@ -472,7 +467,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
           </span>
           {alerta && (
             <span className="alerta-canibal-linha">
-              {formatarMoeda(r.custoCanibalizado)} canibalizados: desconto para quem já vinha
+              {formatarMoeda(r.custoCanibalizado)} de desconto para quem já vinha
             </span>
           )}
         </div>
@@ -491,7 +486,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
         <dl className="campanha-detalhes">
           <div>
             <dt>
-              Canibalizados <Info texto="Desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de escolher janela e público." />
+              Para quem já vinha <Info texto="Desconto dado a quem já frequentava esse horário e viria de qualquer jeito." />
             </dt>
             <dd className={alerta ? "alerta-texto" : undefined}>
               {r.resgatesCanibalizados} · {formatarMoeda(r.custoCanibalizado)}
@@ -579,7 +574,7 @@ function RegistroPlanejador({ planos }: { planos: PlanejamentoView[] }) {
     <section className="cartao-painel" aria-labelledby="t-reg">
       <div className="cabecalho-cartao">
         <h2 id="t-reg">Registro do planejador</h2>
-        <span className="legenda">últimas {planos.length} propostas · lista crua das janelas em <a href="/api/janelas">/api/janelas</a></span>
+        <span className="legenda">últimas {planos.length} propostas</span>
       </div>
       {planos.map((p) => {
         const passaram = p.tentativas.filter((t) => t.aprovada).length;
@@ -637,9 +632,7 @@ function TelefonesTeste({ telefones, jaResgataram }: { telefones: TelefoneTeste[
       </summary>
       <div className="demo-corpo">
         <p className="legenda">
-          Só existe para a apresentação. O banco guarda apenas o hash do telefone; estes números completos são
-          regenerados a partir do seed. Copie um deles e cole na <Link href="/salao">tela do salão</Link> (botão “Colar
-          telefone” ou Ctrl+V). Qualquer número fora da lista mostra a resposta “sem benefício”.
+          Copie um número e cole na <Link href="/salao">tela do salão</Link>. Número fora da lista mostra “sem benefício”.
         </p>
         <h3 className="demo-sub">Com benefício ativo</h3>
         {telefones.length === 0 ? (
@@ -714,8 +707,7 @@ function Grade({ resumo, limite }: { resumo: ResumoOcupacao; limite: number }) {
       <div className="cabecalho-cartao">
         <h2 id="t-ocup">Ocupação média por hora</h2>
         <span className="legenda">
-          % das {resumo.restaurante.capacidade} cadeiras · {fmtData(resumo.periodo.de)} a {fmtData(resumo.periodo.ate)} ·
-          clique numa célula para criar campanha nela
+          {fmtData(resumo.periodo.de)} a {fmtData(resumo.periodo.ate)} · clique num horário para criar campanha
         </span>
       </div>
       <div className="rolagem">

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { contarPalavras, mostrarMarcador, segundosDeFala } from "@/lib/kit-regras";
+import { mostrarMarcador, segundosDeFala } from "@/lib/kit-regras";
 import type { Kit } from "@/lib/kit";
 import { copiar } from "@/lib/copiar";
 
@@ -129,7 +129,7 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
               <>
                 <blockquote className="kit-script">{mostrarMarcador(kit.script_garcom)}</blockquote>
                 <p className="legenda">
-                  {contarPalavras(kit.script_garcom)} palavras · cerca de {segundosDeFala(kit.script_garcom)} s de fala
+                  cerca de {segundosDeFala(kit.script_garcom)} s de fala
                 </p>
               </>
             )}

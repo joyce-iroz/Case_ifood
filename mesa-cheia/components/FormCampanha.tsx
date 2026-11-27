@@ -202,7 +202,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
                 {c ? (
                   <>
                     <b>{c.total}</b>
-                    {c.elegiveis < c.total ? <> · {c.elegiveis} elegíveis</> : " clientes"}
+                    {c.elegiveis < c.total ? <> · {c.elegiveis} podem receber</> : " clientes"}
                   </>
                 ) : (
                   "…"
@@ -269,7 +269,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
       {projecao && <ProjecaoView projecao={projecao.p} controle={projecao.controle} />}
 
       <button className="botao primario" disabled={enviando}>
-        {enviando ? "Emitindo…" : "Criar campanha e emitir benefícios"}
+        {enviando ? "Criando…" : "Criar campanha"}
       </button>
 
       {resultado && <Resultado r={resultado} />}

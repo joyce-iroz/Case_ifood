@@ -50,14 +50,16 @@ export const REGRAS_DEMO = {
 type Turno = "almoco" | "jantar";
 const turnoDaHora = (h: number): Turno => (h < 16 ? "almoco" : "jantar");
 
-// Fator do dia por turno (1 = casa cheia no pico). Terça e quarta fracas, fim de semana cheio.
+// Fator do dia por turno (1 = casa cheia no pico). Terça e quarta fracas; quinta e
+// domingo com jantar fraco (domingo à noite esvazia depois do almoço de família);
+// sexta e sábado cheios. Assim o planejador tem janelas em quatro dias.
 const FATOR_DIA: Record<number, Record<Turno, number>> = {
   2: { almoco: 0.5, jantar: 0.45 },
   3: { almoco: 0.55, jantar: 0.5 },
-  4: { almoco: 0.68, jantar: 0.72 },
+  4: { almoco: 0.68, jantar: 0.53 },
   5: { almoco: 0.78, jantar: 0.95 },
   6: { almoco: 1.0, jantar: 1.08 },
-  0: { almoco: 1.08, jantar: 0.9 },
+  0: { almoco: 1.08, jantar: 0.52 },
 };
 
 // Curva dentro do turno: picos 12h–14h e 19h–21h30.

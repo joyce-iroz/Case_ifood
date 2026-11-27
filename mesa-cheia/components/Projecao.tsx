@@ -1,20 +1,23 @@
 import { formatarMoeda } from "@/lib/dominio";
 import type { Projecao } from "@/lib/projecao";
+import { Info } from "./Info";
 
 const pct = (v: number) => `${String(Math.round(v * 1000) / 10).replace(".", ",")}%`;
 
 const horas = (h: number) => `${String(Math.round(h * 10) / 10).replace(".", ",")}h`;
 
-/** Quais premissas mexeram na taxa, em palavras. */
-function ajustes(p: Projecao): string {
-  const partes: string[] = [];
-  if (Math.abs(p.fatorDesconto - 1) > 0.005)
-    partes.push(
-      `desconto de ${formatarMoeda(p.descontoMedio)} contra ${formatarMoeda(p.descontoRef)} da referência (a taxa acompanha a raiz da razão: o dobro do desconto traz ~41% mais resgates)`,
-    );
-  if (Math.abs(p.fatorDuracao - 1) > 0.005)
-    partes.push(`janela de ${horas(p.horas)} contra ${horas(p.horasRef)} da referência (mesma regra da raiz; janela maior cabe na rotina de mais gente)`);
-  return partes.length ? ` por causa de: ${partes.join("; ")}` : "";
+/** Como a conta foi feita, para o ícone "i". Fica fora da tela principal. */
+function comoCalcula(p: Projecao): string {
+  const base =
+    p.base === "historico"
+      ? `Base: campanhas anteriores deste público, ${pct(p.taxaReferencia)} usaram o desconto (de ${formatarMoeda(p.descontoRef)}, em janela de ${horas(p.horasRef)}).`
+      : `Sem campanha anterior deste público: estimativa de ${pct(p.taxaReferencia)} de uso, para desconto de ${formatarMoeda(p.descontoRef)} em janela de ${horas(p.horasRef)}.`;
+  const ajuste =
+    Math.abs(p.taxaBase - p.taxaReferencia) > 0.0005
+      ? ` Com este desconto e esta janela, vira ${pct(p.taxaBase)}: desconto ou janela 2x maior trazem ~41% mais uso.`
+      : "";
+  const semanas = p.semanas > 1 ? ` Cada semana a mais soma metade disso, até dobrar.` : "";
+  return `${base}${ajuste}${semanas} Desconto típico de ${formatarMoeda(p.descontoMedio)} numa conta de ticket médio.`;
 }
 
 /** Retorno esperado de uma campanha. Sem estado: serve ao planejador e ao formulário. */
@@ -24,11 +27,7 @@ export function ProjecaoView({ projecao, controle }: { projecao: Projecao; contr
     <div className="projecao" aria-live="polite">
       <div className="projecao-cabeca">
         <b>Retorno esperado</b>
-        <span className="legenda">
-          {p.base === "historico"
-            ? `pelo histórico deste segmento: ${pct(p.taxaReferencia)} de resgate com desconto de ${formatarMoeda(p.descontoRef)} em janela de ${horas(p.horasRef)}, ${pct(p.taxaIncremental)} incrementais`
-            : `sem histórico deste segmento: ${pct(p.taxaReferencia)} de resgate (padrão, com desconto de ${formatarMoeda(p.descontoRef)} em janela de ${horas(p.horasRef)}), ${pct(p.taxaIncremental)} incrementais pela definição do segmento`}
-        </span>
+        <Info texto={comoCalcula(p)} />
       </div>
       <div className="projecao-numeros">
         <div>
@@ -55,24 +54,12 @@ export function ProjecaoView({ projecao, controle }: { projecao: Projecao; contr
         </div>
       </div>
       <p className="legenda">
-        {p.emitidos} recebem o benefício
-        {controle > 0 ? `; ${controle} sorteados ficam no grupo de controle, sem benefício, para medir o efeito real.` : "."}{" "}
-        Desconto típico de {formatarMoeda(p.descontoMedio)} por conta de ticket médio
-        {". "}
-        {Math.abs(p.taxaBase - p.taxaReferencia) > 0.0005 && (
-          <>
-            A taxa de resgate passa de {pct(p.taxaReferencia)} para {pct(p.taxaBase)}
-            {ajustes(p)}.
-          </>
-        )}
-        {p.semanas > 1 &&
-          ` Com ${p.semanas} semanas, premissa: cada semana extra soma metade da taxa de uma semana (${pct(p.taxaBase)}), até dobrar; cada benefício continua valendo um resgate só.`}
+        {p.emitidos} recebem a oferta
+        {controle > 0 ? `; ${controle} ficam de fora para medir o efeito real.` : "."}
       </p>
       {p.limitadoPeloTeto && (
         <p className="aviso projecao-teto">
-          O teto limita a campanha: a procura esperada é de {p.demanda} resgates, mas o teto paga só {p.cabeNoTeto}{" "}
-          descontos de {formatarMoeda(p.descontoMedio)}. Depois disso o salão aplica desconto zero. Suba o teto ou baixe o
-          desconto para atender todos.
+          O teto paga só {p.cabeNoTeto} descontos, e a procura esperada é de {p.demanda}. Suba o teto ou baixe o desconto.
         </p>
       )}
     </div>
