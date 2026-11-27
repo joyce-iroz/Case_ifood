@@ -37,7 +37,7 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
 - aposta: rótulo curto do trade-off daquela alternativa, por exemplo "mais volume" (segmento maior), "mais barato" (desconto menor), "cliente novo" (delivery_nunca_veio).
 - As 3 alternativas devem diferir em janela ou em segmento, não só no valor.
 - dia_semana, hora_inicio e hora_fim: copie exatamente de UMA entrada de janelas_candidatas.
-- segmento: uma das chaves de "elegiveis" dessa mesma janela, com valor maior que zero.
+- segmento: o CÓDIGO, uma das chaves de "elegiveis" dessa mesma janela, com valor maior que zero (ex.: "delivery_nunca_veio"). Neste campo vai sempre o código, nunca o nome.
 - clientes_alvo: copie o número de "elegiveis" desse segmento nessa janela.
 - tipo: "desconto_percentual" ou "desconto_valor". valor: um número da lista correspondente em valores_permitidos. Não use um tipo cuja lista esteja vazia.
 - custo_maximo: múltiplo de 50 entre custo_maximo_de e custo_maximo_ate dessa janela.
@@ -47,7 +47,7 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
   2. por que este segmento, com um fato de "segmentos_fatos": taxa de resgate, efeito medido contra o controle ou a observação;
   3. o que esta alternativa ganha ou perde em relação às outras duas (a aposta).
   Cite pelo menos 2 números, todos copiados da entrada. Número que não está na entrada reprova a alternativa.
-  Chame o segmento pelo nome em "descricao", nunca pelo código (ex.: "pede delivery e nunca veio ao salão", não "delivery_nunca_veio").
+  Dentro do texto da justificativa (e só nela), chame o segmento pelo nome em "descricao", nunca pelo código (ex.: "pede delivery e nunca veio ao salão", não "delivery_nunca_veio").
   Não escreva frases que serviriam para qualquer restaurante, como "pode atrair novos clientes" sem dizer quantos nem por quê.
 
 Clientes do segmento frequenta_janela já vêm nesse horário; um benefício para eles quase nunca traz cliente a mais.

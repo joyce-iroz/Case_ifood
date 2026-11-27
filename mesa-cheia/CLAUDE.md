@@ -253,7 +253,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
      `dia_semana` "terca", `hora_inicio` "18:30", `tipo` "desconto_percentual" |
      "desconto_valor", `valor`, `clientes_alvo`, `custo_maximo`,
      `justificativa`), diferindo em janela ou segmento.
-  4. `validarAlternativas` confere cada uma sozinha (formato + `validarContraCardapio`);
+  4. `validarAlternativas` confere cada uma sozinha (formato + `validarContraCardapio`).
+     O campo `segmento` aceita o código ou o nome exato do segmento (`lerSegmento`,
+     sem acento nem caixa): o modelo às vezes copia o nome que a justificativa
+     exige. Qualquer outro texto reprova;
      duplicadas em janela+segmento são descartadas; as que sobram passam por
      `avaliarProposta`. Basta uma sobrar para a tentativa valer. Nenhuma: chama
      de novo com os erros, até 3 vezes. Depois, `propostaFallback`: janela com

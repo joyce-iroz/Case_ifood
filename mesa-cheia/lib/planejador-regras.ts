@@ -140,6 +140,14 @@ export type AlternativaValida = { saida: SaidaModelo; proposta: PropostaCampanha
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
+/** Código do segmento a partir do código ou do nome exibido. Nada fora da lista passa. */
+export function lerSegmento(x: unknown): Segmento | null {
+  if (typeof x !== "string") return null;
+  const t = semAcento(x).replace(/[.\s]+$/, "");
+  const s = SEGMENTOS.find((seg) => seg.id === t || semAcento(seg.rotulo) === t);
+  return s ? s.id : null;
+}
+
 /** Tira cercas de código e lê o JSON. */
 export function lerJson(texto: string): unknown {
   const limpo = texto.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -236,6 +244,10 @@ function validarItem(
   const fim = lerHHMM(o.hora_fim);
   if (dia < 0) erros.push(`dia_semana "${o.dia_semana}" inválido; use ${DIAS_TEXTO.join(", ")}`);
   if (inicio === null || fim === null) erros.push("hora_inicio e hora_fim precisam ser HH:MM em hora cheia ou meia hora");
+  // O modelo às vezes escreve o nome do segmento ("Pede delivery e nunca veio ao salão")
+  // no lugar do código. O nome também é uma lista fechada, então dá para traduzir sem
+  // adivinhar: só aceita se bater exatamente com um rótulo (ignorando acento e caixa).
+  o.segmento = lerSegmento(o.segmento) ?? o.segmento;
   if (!ehSegmento(o.segmento)) erros.push(`segmento "${String(o.segmento)}" não existe; use ${SEGMENTOS.map((x) => x.id).join(", ")}`);
   const tipo = lerTipoSaida(o.tipo) as TipoSaida;
   if (!tipo) erros.push(`tipo "${String(o.tipo)}" inválido; use desconto_percentual ou desconto_valor`);
