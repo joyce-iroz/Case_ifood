@@ -213,9 +213,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   abaixo de `ocupacao_min`; `teto` da campanha ≤ teto mensal restante;
   pelo menos um cliente elegível. `dias_entre_ofertas` tira do lote quem
   recebeu oferta recente; se tirar todos, bloqueia.
-- **Teto no painel**: o mini-indicador mostra o teto do mês da próxima janela, com o
-  nome do mês ("Teto de dezembro"); se for outro mês, mostra embaixo o que o mês
-  atual já gastou ("Novembro: R$ 272,32 gastos em 2 campanhas").
+- **Teto no painel**: o mini-indicador mostra o teto do mês de hoje ("Teto de
+  novembro", livres e quantas campanhas) e, se a próxima janela cair no mês seguinte,
+  embaixo "Dezembro: R$ X livres". Os dois pela mesma `comprometidoNoMes` da criação:
+  campanha aberta reserva o teto inteiro, encerrada conta o que gastou.
 - **Teto mensal comprometido** (`comprometidoNoMes`): no mês de `data_janela`,
   campanha com janela ainda aberta reserva o `teto` inteiro; campanha
   encerrada conta só o que gastou.
@@ -238,9 +239,11 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   antigo, sem a chave, usa a mesma lista fixa); a regra fixa usa o menor limite que cobre o dobro do desconto numa
   conta média. O kit pode citar "R$ limite" além do %.
 - **Vagas do teto** (lib/vagas.ts, `valorDaVaga`, `vagasDoTeto`). Cada vaga separa do
-  teto o desconto máximo de uma mesa: valor fixo = o valor; % com limite = o limite;
-  % sem limite = desconto numa conta de ticket médio (não garante conta grande; a
-  tela sugere o limite). Vaga é guardada (`beneficios.reserva_ate`,
+  teto: valor fixo = o valor, exato; % = o desconto de uma conta de até
+  `FOLGA_CONTA` (2) × o ticket médio, sem passar do limite por conta. Não separa o
+  pior caso: "10% até R$ 50" separaria R$ 50 por mesa e prenderia o teto (uma mesa
+  só chega a R$ 50 com conta de R$ 500). Conta maior que 2× o ticket usa a folga do
+  teto; sem folga, leva ao menos o valor da vaga, que é o garantido. Vaga é guardada (`beneficios.reserva_ate`,
   `reserva_origem`) quando o cliente confirma na página da oferta
   (`/oferta/[token]`, `confirmacao`) ou quando o salão consulta o telefone
   (`chegada`). Quem tem vaga guardada nunca fica sem desconto; quem não tem pega uma
@@ -361,7 +364,10 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   juntos. O texto do modelo vem de `POST /api/kits/[id]/escrever`
   (`escreverKitComModelo`), disparado pelo botão "Escrever com IA" no kit; se
   passar na validação, substitui o texto atual, senão o atual fica e a tela mostra
-  o motivo. Nunca no carregamento de página. O dono também edita os quatro textos no
+  o motivo. A chamada leva `exemplo_de_script` (o texto fixo do público) como modelo de
+  tom, e o prompt lista as palavras proibidas no script (telefone, digite, senhor...).
+  Erro de validação volta ao dono em português, com o nome dos campos da tela.
+  Nunca no carregamento de página. O dono também edita os quatro textos no
   painel ("Editar", `PATCH /api/kits/[id]`, `salvarKitEditado`): mesmas regras, erros
   com o nome dos campos da tela; grava com `modelo = "dono"`. Na exibição (painel e
   salão), `kitAtual` revalida o texto gravado: se fere as regras atuais (kit de
