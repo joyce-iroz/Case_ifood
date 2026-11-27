@@ -234,7 +234,7 @@ export function kitTemplate(e: EntradaKit): TextosKit {
  * nunca chama modelo. Explica sem fazer o cliente se sentir passado para trás.
  */
 export const FALA_SEM_BENEFICIO =
-  "Neste telefone não tem oferta hoje. A gente manda as ofertas por mensagem, para dias e horários específicos; quando chegar uma para você, é só dizer o telefone na hora da conta.";
+  "Que pena, hoje não tem desconto pra esse número. Mas fica de olho: a gente manda ofertas por mensagem de vez em quando, e aí é só falar o telefone na hora da conta.";
 
 /** O que dizer quando a oferta deste telefone já foi usada. */
 export const falaJaUsado = (quando: string) =>
