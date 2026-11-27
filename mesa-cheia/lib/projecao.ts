@@ -109,11 +109,15 @@ export function descontoTipico(
   return r2(Math.min(nominal, limite));
 }
 
+/** A vaga cobre o desconto de uma conta deste múltiplo do ticket médio. */
+export const FOLGA_CONTA = 1;
+
 /**
- * Quanto do teto uma vaga separa. É o desconto máximo que uma mesa pode levar, para a
- * vaga garantida nunca falhar: valor fixo = o valor; % com limite por conta = o limite.
- * % sem limite não tem máximo: separa o desconto numa conta de ticket médio, e uma conta
- * grande pode passar disso (por isso a tela sugere o limite).
+ * Quanto do teto uma vaga separa. Valor fixo: o valor, exato. Em %: o desconto de uma
+ * conta de ticket médio, sem passar do limite por conta ("15% até R$ 30", ticket R$ 78:
+ * R$ 11,70). Separar o máximo (R$ 30) prenderia o teto à toa, já que a mesa média leva
+ * R$ 11,70. Conta acima da média usa a folga do teto; sem folga, leva ao menos o valor
+ * da vaga, que é o que fica garantido.
  */
 export function valorDaVaga(
   c: { tipo: TipoBeneficio; valor: number; limite_por_conta?: number | null },
@@ -121,8 +125,7 @@ export function valorDaVaga(
   descontoMaxPct: number,
 ): number {
   if (c.tipo === "valor_fixo") return r2(c.valor);
-  if (c.limite_por_conta) return r2(c.limite_por_conta);
-  return descontoTipico(c.tipo, c.valor, ticket, descontoMaxPct);
+  return descontoTipico(c.tipo, c.valor, ticket * FOLGA_CONTA, descontoMaxPct, c.limite_por_conta ?? null);
 }
 
 /** Vagas do teto: total, livres (sem contar as garantidas) e quantas foram usadas. */

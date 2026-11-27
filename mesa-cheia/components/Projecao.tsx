@@ -59,8 +59,7 @@ export function ProjecaoView({ projecao, controle }: { projecao: Projecao; contr
       </p>
       {p.limitadoPeloTeto && (
         <p className="aviso projecao-teto">
-          O teto paga só {p.cabeNoTeto} vagas de até {formatarMoeda(p.valorVaga)}, e a procura esperada é de {p.demanda}. Suba
-          o teto, baixe o desconto ou ponha um limite por conta.
+          O teto dá {p.cabeNoTeto} vagas, e a procura esperada é de {p.demanda}. Suba o teto ou baixe o desconto.
         </p>
       )}
     </div>

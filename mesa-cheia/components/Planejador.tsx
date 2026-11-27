@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { formatarHora, formatarMoeda, NOMES_DIA, ordenarDiasSemana } from "@/lib/dominio";
+import { formatarHora, formatarMoeda, NOMES_DIA, nomeMes, ordenarDiasSemana } from "@/lib/dominio";
 import { textoBeneficio, type Bloqueio, type PropostaCampanha } from "@/lib/campanha";
 import {
   DIAS_TEXTO,
@@ -539,7 +539,6 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
 
 function PreviaView({ previa, carregando }: { previa: Previa | null; carregando: boolean }) {
   if (!previa) return <p className="legenda">Conferindo a proposta…</p>;
-  const mes = previa.mes ? previa.mes.split("-").reverse().join("/") : "";
   return (
     <div className={`previa ${carregando ? "carregando" : ""}`} aria-live="polite">
       <div>
@@ -551,7 +550,7 @@ function PreviaView({ previa, carregando }: { previa: Previa | null; carregando:
         <b>{previa.custoMaximo === null ? "—" : formatarMoeda(previa.custoMaximo)}</b>
       </div>
       <div>
-        <span>Sobra no mês {mes}</span>
+        <span>Sobra em {previa.mes ? nomeMes(previa.mes) : "—"}</span>
         <b className={previa.saldoDepois !== null && previa.saldoDepois < 0 ? "alerta-texto" : undefined}>
           {previa.saldoDepois === null ? "—" : formatarMoeda(previa.saldoDepois)}
         </b>

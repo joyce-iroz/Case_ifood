@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Troque a cada entrega: mostra na aba Demo qual versão está no ar. */
-const VERSAO = "27/11 · vagas, limite por conta, kit editável";
+const VERSAO = "27/11 · vagas pela conta média (v2)";
 import { Fragment } from "react";
 import { BotaoResetar } from "@/components/BotaoResetar";
 import { Marca } from "@/components/Marca";
@@ -20,7 +20,7 @@ import type { Regras } from "@/lib/campanha";
 import { contextoDaJanela, type ContextoJanela } from "@/lib/emissao";
 import { descreverErro } from "@/lib/erros";
 import { carregarPainel, type CampanhaPainel, type TelefoneResgatado, type TelefoneTeste } from "@/lib/painel";
-import { textoBeneficio } from "@/lib/campanha";
+import { textoBeneficio, comprometidoNoMes } from "@/lib/campanha";
 import { canibalizadoEmAlerta } from "@/lib/resultados";
 import { rotuloSegmento } from "@/lib/segmentos";
 import { janelaMaisVazia, type ResumoOcupacao } from "@/lib/ocupacao";
@@ -232,18 +232,29 @@ function Destaque({
   const pior = janelaMaisVazia(resumo);
   const resgates = painel.reduce((s, c) => s + c.resultado.resgatados, 0);
   const incrementais = painel.reduce((s, c) => s + c.resultado.resgatesIncrementais, 0);
-  const restante = Math.max(0, ctx.tetoRestanteMes);
-  const usado = regras.teto_mes > 0 ? Math.min(100, ((regras.teto_mes - restante) / regras.teto_mes) * 100) : 0;
+  // Teto por mês, a mesma conta da criação de campanha (comprometidoNoMes): campanha
+  // ainda aberta reserva o teto inteiro; encerrada conta o que gastou. Mostra o mês de
+  // hoje e, embaixo, o mês da próxima janela, se for outro.
+  const mesAtual = hojeNoFuso().slice(0, 7);
+  const tetoDoMes = (mes: string) => {
+    const doMes = painel.filter((c) => c.campanha.data_janela.startsWith(mes));
+    const comprometido = comprometidoNoMes(
+      doMes.map((c) => ({ ...c.campanha, gasto: c.resultado.custoDescontos })),
+      mes,
+    );
+    return { livre: Math.max(0, regras.teto_mes - comprometido), comprometido, n: doMes.length };
+  };
+  const tetoAtual = tetoDoMes(mesAtual);
+  const tetoProximo = ctx.mes !== mesAtual ? tetoDoMes(ctx.mes) : null;
+  const restante = tetoAtual.livre;
+  const usado = regras.teto_mes > 0 ? Math.min(100, (tetoAtual.comprometido / regras.teto_mes) * 100) : 0;
+  const mesMaiusculo = (m: string) => nomeMes(m).replace(/^./, (c) => c.toUpperCase());
   const fracas = resumo.vaziasAbaixoMinimo30d;
   // Premissa: cada mesa fica 1h30; cada cadeira vazia nesse tempo é uma conta de ticket médio que não entrou.
   const naoEntrou = Math.round((fracas / PERMANENCIA_H) * ticketMedio);
   const meta = Math.max(1, Math.round(fracas * META_RECUPERACAO));
   const progresso = Math.min(100, (recuperadas / meta) * 100);
   const entregues = painel.filter((c) => c.kit?.entregue_em).length;
-  // O teto mostrado é o do mês da próxima janela; o mês de hoje pode já ter gasto.
-  const mesAtual = hojeNoFuso().slice(0, 7);
-  const doMes = painel.filter((c) => c.campanha.data_janela.startsWith(mesAtual));
-  const gastoMesAtual = { valor: doMes.reduce((s, c) => s + c.resultado.custoDescontos, 0), n: doMes.length };
   const reais = (v: number) => formatarMoeda(v).replace(/,00$/, "");
   return (
     <>
@@ -302,20 +313,22 @@ function Destaque({
         )}
         <div className="mini-kpi">
           <span>
-            Teto de {nomeMes(ctx.mes)}{" "}
-            <Info texto="O teto é por mês. Conta o mês em que a campanha acontece: a próxima janela pode cair no mês que vem." />
+            Teto de {nomeMes(mesAtual)}{" "}
+            <Info texto="O teto é por mês e conta no mês em que a campanha acontece. Campanha em andamento separa o teto inteiro dela; campanha encerrada conta só o que gastou." />
           </span>
           <b>{reais(restante)}</b>
           <div className="kpi-barra" aria-hidden="true">
             <span style={{ width: `${usado}%` }} />
           </div>
           <small>
-            livres de {reais(regras.teto_mes)} · <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
+            livres de {reais(regras.teto_mes)}
+            {tetoAtual.n > 0 && ` · ${tetoAtual.n} ${tetoAtual.n === 1 ? "campanha" : "campanhas"}`} ·{" "}
+            <Link href="/dono?aba=configurar&regras=1#regras">alterar</Link>
           </small>
-          {mesAtual !== ctx.mes && gastoMesAtual.n > 0 && (
+          {tetoProximo && (
             <small>
-              {nomeMes(mesAtual).replace(/^./, (c) => c.toUpperCase())}: {formatarMoeda(gastoMesAtual.valor)} gastos em{" "}
-              {gastoMesAtual.n} {gastoMesAtual.n === 1 ? "campanha" : "campanhas"}
+              {mesMaiusculo(ctx.mes)}: {reais(tetoProximo.livre)} livres
+              {tetoProximo.n > 0 && ` · ${tetoProximo.n} ${tetoProximo.n === 1 ? "campanha" : "campanhas"}`}
             </small>
           )}
         </div>
@@ -418,7 +431,7 @@ function CartaoCampanha({ cp }: { cp: CampanhaPainel }) {
             <span className="vagas-titulo">
               {cp.vagas.total} vagas de até {formatarMoeda(cp.vagas.valor)}{" "}
               <Info
-                texto={`O teto de ${formatarMoeda(c.teto)} vira vagas. Quem confirma pela oferta ou chega ao salão guarda uma, e ninguém com vaga fica sem desconto. Sem vaga livre, quem não confirmou ouve que as vagas acabaram.${c.tipo === "percentual" && !c.limite_por_conta ? " Sem limite por conta, uma conta grande pode levar mais que uma vaga." : ""}`}
+                texto={`O teto de ${formatarMoeda(c.teto)} vira vagas. ${c.tipo === "percentual" ? `Cada vaga separa o desconto de uma conta média; conta maior usa a folga do teto.` : "Cada vaga separa o valor do desconto."} Quem confirma pela oferta ou chega ao salão guarda uma e não fica sem desconto. Sem vaga livre, quem não confirmou ouve que as vagas acabaram.`}
               />
             </span>
             <span>

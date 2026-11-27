@@ -34,7 +34,7 @@ O texto tem de ser desta campanha, não de uma qualquer:
 - A mensagem da equipe diz que só quem recebeu a oferta tem desconto.
 
 Responda só com um objeto JSON, sem texto fora dele, com exatamente estas chaves:
-- script_garcom: o que o atendente fala depois que a tela mostrou que ESTE cliente tem o benefício. No máximo 45 palavras, tom falado, sem jargão de marketing.
+- script_garcom: o que o atendente fala depois que a tela mostrou que ESTE cliente tem o benefício. O telefone JÁ FOI digitado pelo atendente: o script nunca fala em telefone. Palavras proibidas no script: telefone, digite, registrar, cadastro, senhor, senhora, automaticamente, todos. Use "exemplo_de_script" como modelo de tom e tamanho e escreva uma variação sua. No máximo 45 palavras, tom falado, sem jargão de marketing.
 - mensagem_equipe: recado para o grupo de WhatsApp da equipe, avisando da campanha (dia, horário, benefício, quem recebeu) e do que fazer: quando o cliente sentar, digitar o telefone dele na tela do salão (isso guarda a vaga do desconto); no fechamento, digitar de novo e, se aparecer benefício, ler a frase da tela e aplicar. Tom de recado interno.
 - cartaz_titulo: chamada curta para cartaz de mesa, no máximo 6 palavras.
 - cartaz_linha: uma linha explicando como o cliente usa: informar o telefone ao garçom no fechamento da conta.
@@ -82,7 +82,11 @@ export async function escreverKitComModelo(campanhaId: string): Promise<Resultad
     try {
       const resposta = await gerarJson(
         INSTRUCAO_KIT,
-        JSON.stringify(erros.length ? { dados: entrada, erros_da_tentativa_anterior: erros } : { dados: entrada }),
+        JSON.stringify({
+          dados: entrada,
+          exemplo_de_script: kitTemplate(entrada).script_garcom,
+          ...(erros.length ? { erros_da_tentativa_anterior: erros } : {}),
+        }),
         15_000,
       );
       const v = validarKit(resposta, beneficio, entrada);
@@ -98,7 +102,7 @@ export async function escreverKitComModelo(campanhaId: string): Promise<Resultad
         return { ok: true, modelo };
       }
       erros = v.erros;
-      ultimoErro = `O texto do modelo não passou na validação: ${v.erros.join("; ")}`;
+      ultimoErro = `A IA escreveu um texto fora das regras (${v.erros.map(paraODono).join("; ")}).`;
     } catch (e) {
       ultimoErro = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
       // Sem chave ou sem cota, tentar de novo agora só gasta mais limite.
@@ -106,7 +110,10 @@ export async function escreverKitComModelo(campanhaId: string): Promise<Resultad
       erros = [];
     }
   }
-  return { ok: false, erro: `${ultimoErro.replace(/\.?\s*$/, ".")} O texto atual do kit continua valendo.` };
+  return {
+    ok: false,
+    erro: `${ultimoErro.replace(/\.?\s*$/, ".")} O texto atual continua valendo. Tente de novo ou toque em Editar e escreva você.`,
+  };
 }
 
 export type Kit = TextosKit & {
