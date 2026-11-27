@@ -5,7 +5,8 @@ import "server-only";
 import { supabaseServidor } from "./supabase/server";
 import { paginar } from "./dados";
 import { RESTAURANTE_DEMO_ID, formatarHora, formatarJanela, NOMES_DIA } from "./dominio";
-import { avaliarJanela, avaliarProposta, carregarBase, criarCampanha, type Base, type ResultadoCriacao } from "./emissao";
+import { avaliarJanela, avaliarProposta, carregarBase, criarCampanha, tamanhoControle, type Base, type ResultadoCriacao } from "./emissao";
+import { projetar, type Projecao } from "./projecao";
 import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
 import { calcularCandidatas } from "./janelas";
 import {
@@ -38,6 +39,7 @@ aposta, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, clientes_alvo,
 - clientes_alvo: copie o número "elegiveis" desse segmento nessa janela.
 - tipo: "desconto_percentual" ou "desconto_valor". valor: um número da lista correspondente em valores_permitidos. Não use um tipo cuja lista esteja vazia.
 - custo_maximo: um número da lista custos_maximos_permitidos dessa janela.
+- semanas: um número de semanas_permitidas (por quantas semanas a janela se repete). Use 1 se não houver motivo para repetir.
 - justificativa: duas ou três frases em português do Brasil, citando a ocupação média da janela e por que esse segmento. Use só números que aparecem na entrada.
 
 Clientes do segmento frequenta_janela já vêm nesse horário; um benefício para eles quase nunca traz cliente a mais.
@@ -375,7 +377,26 @@ export type Previa = {
   saldoDepois: number | null;
   mes: string | null;
   bloqueios: Bloqueio[];
+  controle: number | null;      // quantos dos elegíveis vão para o grupo de controle
+  projecao: Projecao | null;    // retorno esperado, pelo histórico do segmento
 };
+
+function projetarPara(p: PropostaCampanha, elegiveis: number, base: Base): { controle: number; projecao: Projecao } {
+  const controle = tamanhoControle(elegiveis);
+  return {
+    controle,
+    projecao: projetar({
+      emitidos: elegiveis - controle,
+      semanas: p.semanas,
+      tipo: p.tipo,
+      valor: p.valor,
+      teto: p.teto,
+      ticketMedio: base.restaurante.ticket_medio,
+      descontoMax: base.regras.desconto_max,
+      taxa: base.taxas[p.segmento],
+    }),
+  };
+}
 
 /** Prévia ao vivo do editor: mesma revalidação da aprovação, sem gravar nada. */
 export async function previaPlanejamento(planejamentoId: string, entrada: unknown): Promise<Previa> {
@@ -389,6 +410,7 @@ export async function previaPlanejamento(planejamentoId: string, entrada: unknow
       const av = avaliarProposta(lida.proposta, base);
       const saldo = av.ok ? av.ctx.tetoRestanteMes : null;
       return {
+        ...(av.ok ? projetarPara(lida.proposta, av.elegiveis.length, base) : { controle: null, projecao: null }),
         ok: false,
         elegiveis: av.ok ? av.elegiveis.length : null,
         custoMaximo: lida.proposta.teto,
@@ -398,10 +420,21 @@ export async function previaPlanejamento(planejamentoId: string, entrada: unknow
         bloqueios: r.bloqueios,
       };
     }
-    return { ok: false, elegiveis: null, custoMaximo: null, saldoAntes: null, saldoDepois: null, mes: null, bloqueios: r.bloqueios };
+    return {
+      ok: false,
+      elegiveis: null,
+      custoMaximo: null,
+      saldoAntes: null,
+      saldoDepois: null,
+      mes: null,
+      bloqueios: r.bloqueios,
+      controle: null,
+      projecao: null,
+    };
   }
   const saldo = r.av.ctx.tetoRestanteMes;
   return {
+    ...projetarPara(r.proposta, r.av.elegiveis.length, base),
     ok: true,
     elegiveis: r.av.elegiveis.length,
     custoMaximo: r.proposta.teto,
@@ -413,7 +446,7 @@ export async function previaPlanejamento(planejamentoId: string, entrada: unknow
 }
 
 const mesma = (a: PropostaCampanha, b: PropostaCampanha) =>
-  (["dia_semana", "hora_inicio", "hora_fim", "segmento", "tipo", "valor", "teto"] as const).every((k) => a[k] === b[k]);
+  (["dia_semana", "hora_inicio", "hora_fim", "segmento", "tipo", "valor", "teto", "semanas"] as const).every((k) => a[k] === b[k]);
 
 /**
  * Aprovar: a proposta do navegador é revalidada inteira (cardápio daquele planejamento

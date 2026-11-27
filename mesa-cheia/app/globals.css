@@ -557,3 +557,37 @@ code, .mono { font-family: var(--fonte-mono); }
 .editor-teto input[type="range"] { width: 100%; accent-color: var(--vermelho); }
 .demo-sub { margin: 18px 0 10px; font-size: 14px; font-weight: 600; color: var(--texto-2); font-family: var(--fonte-texto); }
 .kpi-acao { align-self: flex-start; font-size: 13px; font-weight: 600; }
+
+/* projeção de retorno */
+.previa-largo { grid-column: 1 / -1; }
+.projecao { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 12px; background: var(--superficie); border: 1px solid var(--borda); }
+.projecao p { margin: 0; }
+.projecao-cabeca { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.projecao-cabeca b { font-family: var(--fonte-titulo); font-size: 16px; font-weight: 600; }
+.projecao-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.projecao-numeros div { display: flex; flex-direction: column; gap: 2px; }
+.projecao-numeros span { font-size: 12px; color: var(--texto-suave); }
+.projecao-numeros b { font-family: var(--fonte-titulo); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* salão: pessoas na mesa ao lado do valor da conta */
+.conta-e-mesa { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+.mesa { display: grid; grid-template-columns: 40px auto 40px; align-items: center; gap: 2px; padding: 0 4px; border-radius: 14px; border: 1px solid #3a3a3f; background: var(--fundo); }
+.mesa button { font: inherit; font-size: 20px; min-height: 44px; border: 0; background: none; color: var(--texto-2); cursor: pointer; touch-action: manipulation; }
+.mesa span { display: flex; flex-direction: column; align-items: center; line-height: 1.1; min-width: 44px; }
+.mesa b { font-family: var(--fonte-titulo); font-size: 20px; }
+.mesa small { font-size: 10px; color: var(--texto-suave); }
+
+/* resultado: pausa e botão de demo */
+.botao.botao-mini { min-height: 32px; padding: 4px 10px; font-size: 12px; margin-top: 6px; }
+.tabela .sub.pausa { color: var(--vermelho-texto-fraco); max-width: 340px; white-space: normal; margin-top: 4px; }
+.tabela { min-width: 1140px; }
+
+/* diagnóstico para restaurante novo */
+.diagnostico-intro h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 40px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.diagnostico-intro .legenda { font-size: 16px; max-width: 760px; }
+.dias-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.grade-diagnostico td { padding: 0; }
+.nivel { font: inherit; font-size: 13px; width: 100%; min-height: 44px; border: 0; background: none; color: inherit; cursor: pointer; }
+.diag-resultado { display: flex; flex-direction: column; gap: 16px; }
+.diag-resultado > div { display: flex; flex-direction: column; gap: 4px; }
+.diag-piores { margin: 4px 0 0; padding-left: 18px; font-size: 14px; color: var(--texto-2); }

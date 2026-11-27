@@ -3,6 +3,7 @@
 import {
   agoraNoFuso,
   diaDaSemana,
+  formatarDataCurta,
   formatarHora,
   formatarMoeda,
   horasDeFuncionamento,
@@ -29,7 +30,14 @@ export type PropostaCampanha = {
   tipo: TipoBeneficio;
   valor: number;       // % da conta (percentual) ou R$ (valor_fixo)
   teto: number;        // gasto máximo da campanha em descontos, R$
+  semanas: number;     // 1 a 4: repete a janela no mesmo dia da semana por N semanas
 };
+
+export const SEMANAS_MAX = 4;
+/** % dos elegíveis sorteados para o grupo de controle (não recebem o benefício). */
+export const CONTROLE_PCT = 20;
+/** Abaixo disso o controle fica pequeno demais para dizer algo: todos recebem. */
+export const CONTROLE_MIN_ELEGIVEIS = 10;
 
 export type Regras = {
   teto_mes: number;
@@ -55,6 +63,7 @@ export function lerProposta(x: unknown): { proposta: PropostaCampanha } | { bloq
     tipo: o.tipo,
     valor: num("valor"),
     teto: num("teto"),
+    semanas: o.semanas === undefined || o.semanas === null || o.semanas === "" ? 1 : num("semanas"),
   };
   const erros: string[] = [];
   if (!Number.isInteger(p.dia_semana) || p.dia_semana < 0 || p.dia_semana > 6) erros.push("dia da semana inválido");
@@ -65,6 +74,8 @@ export function lerProposta(x: unknown): { proposta: PropostaCampanha } | { bloq
   if (!ehTipo(p.tipo)) erros.push("tipo de benefício inválido");
   if (!Number.isFinite(p.valor) || p.valor <= 0) erros.push("valor do benefício precisa ser maior que zero");
   if (!Number.isFinite(p.teto) || p.teto <= 0) erros.push("teto de gasto precisa ser maior que zero");
+  if (!Number.isInteger(p.semanas) || p.semanas < 1 || p.semanas > SEMANAS_MAX)
+    erros.push(`duração precisa ser de 1 a ${SEMANAS_MAX} semanas`);
   if (erros.length) return { bloqueios: erros.map((mensagem) => ({ regra: "dados", mensagem })) };
   return { proposta: p as PropostaCampanha };
 }
@@ -136,12 +147,36 @@ export function validarProposta(
 }
 
 /** Próxima ocorrência da janela: hoje, se a janela ainda não acabou; senão, a próxima semana. */
-export function proximaJanela(janela: Janela, agora = agoraNoFuso()) {
+export function proximaJanela(janela: Janela, agora = agoraNoFuso(), semanas = 1) {
   let data = agora.data;
   let dias = (janela.dia - diaDaSemana(data) + 7) % 7;
   if (dias === 0 && agora.hora + agora.minuto / 60 >= janela.fim) dias = 7;
   data = somarDias(data, dias);
-  return { data, valido_de: instanteNoFuso(data, janela.inicio), valido_ate: instanteNoFuso(data, janela.fim) };
+  const datas = ocorrencias(data, semanas);
+  return {
+    data,
+    datas,
+    valido_de: instanteNoFuso(data, janela.inicio),
+    valido_ate: instanteNoFuso(datas.at(-1)!, janela.fim), // fim da ÚLTIMA ocorrência
+  };
+}
+
+/** As datas em que a campanha vale: a primeira e as semanas seguintes. */
+export function ocorrencias(dataJanela: string, semanas = 1): string[] {
+  return Array.from({ length: Math.max(1, semanas) }, (_, i) => somarDias(dataJanela, 7 * i));
+}
+
+/** Instante em que a campanha termina: fim da janela na última ocorrência. */
+export const fimDaCampanha = (c: { data_janela: string; hora_fim: number; semanas?: number }) =>
+  instanteNoFuso(ocorrencias(c.data_janela, c.semanas ?? 1).at(-1)!, c.hora_fim);
+
+/** Agora está dentro de uma das ocorrências (dia e faixa de hora)? */
+export function dentroDeOcorrencia(
+  c: { data_janela: string; hora_inicio: number; hora_fim: number; semanas?: number },
+  agora = agoraNoFuso(),
+): boolean {
+  const h = agora.hora + agora.minuto / 60;
+  return ocorrencias(c.data_janela, c.semanas ?? 1).includes(agora.data) && h >= c.hora_inicio && h < c.hora_fim;
 }
 
 /**
@@ -149,14 +184,16 @@ export function proximaJanela(janela: Janela, agora = agoraNoFuso()) {
  * terminou reserva o teto inteiro; campanha encerrada conta só o que gastou.
  */
 export function comprometidoNoMes(
-  campanhas: { data_janela: string; hora_fim: number; teto: number; gasto: number }[],
+  campanhas: { data_janela: string; hora_fim: number; teto: number; gasto: number; semanas?: number; status?: string }[],
   mes: string,
   agoraIso = new Date().toISOString(),
 ): number {
   let total = 0;
   for (const c of campanhas) {
+    // O teto inteiro conta no mês da primeira ocorrência, mesmo que as semanas passem para o mês seguinte.
     if (!c.data_janela.startsWith(mes)) continue;
-    const terminou = new Date(instanteNoFuso(c.data_janela, c.hora_fim)).getTime() <= new Date(agoraIso).getTime();
+    const terminou =
+      c.status === "pausada" || new Date(fimDaCampanha(c)).getTime() <= new Date(agoraIso).getTime();
     total += terminou ? c.gasto : c.teto;
   }
   return Math.round(total * 100) / 100;
@@ -217,3 +254,32 @@ export function gerarCodigos(n: number, aleatorio: () => number): string[] {
  * dia. Depois de `valido_ate` continua recusando. Em produção, troque para false.
  */
 export const DEMO_ACEITA_ANTES_DA_JANELA = true;
+
+/**
+ * Pausa automática: se alguma ocorrência da campanha já registrou ocupação média
+ * igual ou acima do mínimo das regras, a janela enche sem desconto e a campanha para.
+ * Devolve o motivo, ou null. Aritmética sobre registros de ocupação (caixa / POS).
+ */
+export function motivoDePausa(
+  c: { data_janela: string; hora_inicio: number; hora_fim: number; semanas: number },
+  registros: { data: string; hora: number; pessoas: number }[],
+  capacidade: number,
+  ocupacaoMin: number,
+): string | null {
+  for (const d of ocorrencias(c.data_janela, c.semanas)) {
+    let soma = 0;
+    let peso = 0;
+    for (const r of registros) {
+      if (r.data !== d) continue;
+      const dentro = Math.min(r.hora + 1, c.hora_fim) - Math.max(r.hora, c.hora_inicio);
+      if (dentro <= 0) continue;
+      soma += (r.pessoas / capacidade) * 100 * dentro;
+      peso += dentro;
+    }
+    if (!peso) continue;
+    const media = Math.round(soma / peso);
+    if (media >= ocupacaoMin)
+      return `A ocupação de ${formatarDataCurta(d)}, ${formatarHora(c.hora_inicio)}–${formatarHora(c.hora_fim)}, chegou a ${media}%, acima do mínimo de ${ocupacaoMin}%. A janela já enche sem desconto.`;
+  }
+  return null;
+}

@@ -51,9 +51,11 @@ export function conferirNumeros(textos: TextosKit, b: BeneficioKit): string[] {
 export const contarPalavras = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
 export const segundosDeFala = (t: string) => Math.round(contarPalavras(t) / PALAVRAS_POR_SEGUNDO);
 
-/** "terça, 18h30 às 20h" */
-export const janelaNatural = (dia: number, inicio: number, fim: number) =>
-  `${nomeDiaLongo(dia)}, ${formatarHora(inicio)} às ${formatarHora(fim)}`;
+/** "terça, 18h30 às 20h" ou "toda terça, 18h30 às 20h, por 3 semanas" */
+export const janelaNatural = (dia: number, inicio: number, fim: number, semanas = 1) =>
+  semanas > 1
+    ? `${dia === 0 || dia === 6 ? "todo" : "toda"} ${nomeDiaLongo(dia)}, ${formatarHora(inicio)} às ${formatarHora(fim)}, por ${semanas} semanas`
+    : `${nomeDiaLongo(dia)}, ${formatarHora(inicio)} às ${formatarHora(fim)}`;
 
 export function validarKit(texto: string, beneficio: BeneficioKit): { ok: true; kit: TextosKit } | { ok: false; erros: string[] } {
   let o: unknown;

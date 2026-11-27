@@ -42,7 +42,8 @@ export async function POST() {
       };
     }
 
-    const clientes = gerados.map((g) => ({ id: g.id, ...g.linha })); // telefone em claro não vai para o banco
+    // Inserção em lote: toda linha precisa das mesmas colunas, ou a API grava nulo nas que faltam.
+    const clientes = gerados.map((g) => ({ id: g.id, pedidos_cozinha_regiao: 0, distancia_km: null, ...g.linha })); // telefone em claro não vai para o banco
     const visitas = gerados.flatMap((g) =>
       g.visitas.map((v) => ({ restaurante_id: RESTAURANTE_DEMO.id, cliente_id: g.id, data: v.data, hora: v.hora })),
     );
@@ -64,8 +65,12 @@ export async function POST() {
     const falha2 = etapa2.find((r) => r.error);
     if (falha2?.error) throw falha2.error;
 
-    const r3 = await db.from("resgates").insert(historico.resgates);
-    if (r3.error) throw r3.error;
+    const etapa3 = await Promise.all([
+      db.from("resgates").insert(historico.resgates),
+      db.from("controles").insert(historico.controles),
+    ]);
+    const falha3 = etapa3.find((r) => r.error);
+    if (falha3?.error) throw falha3.error;
 
     return NextResponse.json({
       ok: true,

@@ -10,12 +10,14 @@ import {
   lerHHMM,
   tipoDoCardapio,
   type Cardapio,
+  semanasDoCardapio,
   type JanelaCardapio,
 } from "@/lib/planejador-regras";
 import { SEGMENTOS, rotuloSegmento, type Segmento } from "@/lib/segmentos";
 import type { Alternativa, PlanejamentoView, Previa } from "@/lib/planejador";
 import type { ResultadoCriacao } from "@/lib/emissao";
 import { Tentativas } from "./Tentativas";
+import { ProjecaoView } from "./Projecao";
 
 const num = (n: number) => String(n).replace(".", ",");
 const chaveJanela = (j: JanelaCardapio) => `${j.dia_semana}|${j.hora_inicio}|${j.hora_fim}`;
@@ -92,6 +94,8 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
             saldoDepois: null,
             mes: null,
             bloqueios: [{ regra: "dados", mensagem: e instanceof Error ? e.message : "Falha na prévia" }],
+            controle: null,
+            projecao: null,
           });
       } finally {
         if (v === versao.current) setCarregandoPrevia(false);
@@ -170,6 +174,20 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
           </div>
 
           {plano.motivo && <p className="cartao-linha">{plano.motivo}</p>}
+
+          {plano.origem === "fallback" && plano.tentativas.length > 0 && (
+            <div className="aviso motivo-fallback">
+              <b>Por que o modelo foi reprovado (tentativa {plano.tentativas.at(-1)!.numero}):</b>
+              <ul>
+                {plano.tentativas
+                  .at(-1)!
+                  .erros.slice(0, 4)
+                  .map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+              </ul>
+            </div>
+          )}
 
           {plano.alternativas.length > 0 && (
             <div className="alternativas" role="radiogroup" aria-label="Alternativas">
@@ -385,6 +403,16 @@ function Editor({ cardapio, p, aoMudar }: { cardapio: Cardapio; p: PropostaCampa
           ))}
         </select>
       </label>
+      <label className="campo">
+        Duração
+        <select value={p.semanas} onChange={(e) => aoMudar({ ...p, semanas: Number(e.target.value) })}>
+          {semanasDoCardapio(cardapio).map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? "só a próxima ocorrência" : `${n} semanas seguidas`}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="campo editor-teto">
         <span id="rot-teto">Teto da campanha</span>
         <div className="teto-controle">
@@ -439,6 +467,11 @@ function PreviaView({ previa, carregando }: { previa: Previa | null; carregando:
           {previa.saldoDepois === null ? "—" : formatarMoeda(previa.saldoDepois)}
         </b>
       </div>
+      {previa.projecao && previa.controle !== null && (
+        <div className="previa-largo">
+          <ProjecaoView projecao={previa.projecao} controle={previa.controle} />
+        </div>
+      )}
       {previa.bloqueios.length > 0 && (
         <ul className="previa-bloqueios">
           {previa.bloqueios.map((b: Bloqueio, i: number) => (
@@ -455,6 +488,7 @@ function ResultadoAprovacao({ r }: { r: ResultadoCriacao }) {
     return (
       <div className="sucesso">
         <b>Campanha criada.</b> {r.emitidos} benefícios emitidos, válidos {r.validade}.
+        {r.controle > 0 && <> {r.controle} clientes sorteados para o grupo de controle.</>}
         {r.foraPorIntervalo > 0 && <> {r.foraPorIntervalo} clientes ficaram de fora por oferta recente.</>}{" "}
         {r.kit.gerado
           ? r.kit.modelo

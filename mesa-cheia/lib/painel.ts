@@ -1,10 +1,12 @@
 import "server-only";
 import { carregarCampanhasCompletas, carregarClientesComVisitas, expirarVencidos, type CampanhaRegistro } from "./dados";
-import { RESTAURANTE_DEMO_ID, hojeNoFuso, instanteNoFuso } from "./dominio";
+import { RESTAURANTE_DEMO_ID, hojeNoFuso, somarDias } from "./dominio";
+import { verificarPausas } from "./pausa";
+import { medirControle, type MedidaControle } from "./controle";
 import { carregarKits, type Kit } from "./kit";
-import { janelaDa } from "./campanha";
-import { visitouNaJanela } from "./segmentos";
-import { resumirCampanha, type LinhaResultado } from "./resultados";
+import { fimDaCampanha, janelaDa } from "./campanha";
+import { segmentoAnonimo, visitouNaJanela } from "./segmentos";
+import { cadeirasRecuperadas, resumirCampanha, type LinhaResultado } from "./resultados";
 import { gerarClientesCompletos } from "./seed";
 import { formatarTelefoneCompleto, mascararPorFinal } from "./telefone";
 
@@ -22,7 +24,8 @@ export type CampanhaPainel = {
   resultado: LinhaResultado;
   beneficios: BeneficioPainel[];
   kit: Kit | null;
-  ativa: boolean; // a janela ainda não terminou
+  ativa: boolean; // ainda não terminou e não foi pausada
+  controle: MedidaControle;
 };
 
 export type TelefoneTeste = {
@@ -45,10 +48,12 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
   campanhas: CampanhaPainel[];
   telefonesTeste: TelefoneTeste[];
   jaResgataram: TelefoneResgatado[];
+  cadeirasRecuperadas30d: number;
 }> {
+  await verificarPausas(id);
   await expirarVencidos();
   const hoje = hojeNoFuso();
-  const [{ campanhas, beneficios, resgates }, base] = await Promise.all([
+  const [{ campanhas, beneficios, resgates, controles }, base] = await Promise.all([
     carregarCampanhasCompletas(id),
     carregarClientesComVisitas(id),
   ]);
@@ -64,15 +69,23 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     return {
       campanha: c,
       kit: kits.get(c.id) ?? null,
-      ativa: new Date(instanteNoFuso(c.data_janela, c.hora_fim)).getTime() > agoraMs,
+      ativa: c.status === "ativa" && new Date(fimDaCampanha(c)).getTime() > agoraMs,
+      controle: medirControle(
+        c,
+        bs.map((b) => b.cliente_id),
+        controles.filter((k) => k.campanha_id === c.id).map((k) => k.cliente_id),
+        base.visitasDe,
+      ),
       resultado: resumirCampanha(bs, rs),
       beneficios: bs
         .map((b) => {
           const cl = cliente.get(b.cliente_id);
           const r = resgateDe.get(b.id);
+          // Cliente da região é dado da plataforma: o restaurante vê o resgate, não a pessoa.
+          const anonimo = segmentoAnonimo(c.segmento) && cl?.origem === "regiao";
           return {
-            nome: cl?.nome ?? "—",
-            telefone: cl ? mascararPorFinal(cl.telefone_final) : "—",
+            nome: anonimo ? "Cliente da região (via iFood)" : (cl?.nome ?? "—"),
+            telefone: anonimo || !cl ? "—" : mascararPorFinal(cl.telefone_final),
             codigo: b.codigo,
             status: b.status,
             desconto: r?.desconto ?? null,
@@ -140,5 +153,8 @@ export async function carregarPainel(id = RESTAURANTE_DEMO_ID): Promise<{
     if (jaResgataram.length === 4) break;
   }
 
-  return { campanhas: linhas, telefonesTeste, jaResgataram };
+  const desde = `${somarDias(hoje, -30)}T00:00:00-03:00`;
+  const recentes = resgates.filter((r) => new Date(r.criado_em).getTime() >= new Date(desde).getTime());
+
+  return { campanhas: linhas, telefonesTeste, jaResgataram, cadeirasRecuperadas30d: cadeirasRecuperadas(recentes) };
 }

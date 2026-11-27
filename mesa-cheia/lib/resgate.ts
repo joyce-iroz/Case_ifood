@@ -2,12 +2,14 @@ import "server-only";
 // Salão: consulta por telefone e resgate. Consulta direta ao banco, sem LLM.
 import { supabaseServidor } from "./supabase/server";
 import { carregarRegras, expirarVencidos, lerCampanha, lerResgate } from "./dados";
-import { RESTAURANTE_DEMO_ID, agoraNoFuso, formatarJanela, somarDias } from "./dominio";
+import { RESTAURANTE_DEMO_ID, agoraNoFuso, formatarValidade, somarDias } from "./dominio";
 import { hashTelefone } from "./hash";
 import { normalizarTelefone } from "./telefone";
 import { lerCampoNumero } from "./numero";
 import {
   DEMO_ACEITA_ANTES_DA_JANELA,
+  dentroDeOcorrencia,
+  ocorrencias,
   calcularDesconto,
   janelaDa,
   textoBeneficio,
@@ -34,7 +36,7 @@ export class EntradaInvalidaError extends Error {}
 
 const BENEFICIO_COM_CAMPANHA =
   "id, campanha_id, cliente_id, codigo, valido_de, valido_ate, status, criado_em, " +
-  "campanhas!inner(id, restaurante_id, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, teto, status, data_janela, criado_em)";
+  "campanhas!inner(id, restaurante_id, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, teto, status, data_janela, semanas, controle_pct, pausada_em, motivo_pausa, criado_em)";
 
 async function gastoDaCampanha(campanhaId: string): Promise<number> {
   const { data, error } = await supabaseServidor()
@@ -100,7 +102,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
       nome: cliente.nome,
       codigo: b.codigo,
       beneficio: textoBeneficio(c.tipo, c.valor),
-      validade: formatarJanela(c.data_janela, c.hora_inicio, c.hora_fim),
+      validade: formatarValidade(ocorrencias(c.data_janela, c.semanas), c.hora_inicio, c.hora_fim),
       antesDaJanela: new Date(b.valido_de).getTime() > agora,
       script: kit.error ? null : (kit.data?.script_garcom ?? null),
       calculo: { tipo: c.tipo, valor: c.valor, descontoMax: regras.desconto_max, tetoRestante: c.teto - gasto },
@@ -111,7 +113,7 @@ export async function consultarTelefone(entrada: string, id = RESTAURANTE_DEMO_I
   if (ultimo?.status === "resgatado") {
     const { data: r, error: e3 } = await db
       .from("resgates")
-      .select("valor_conta, desconto, incremental, criado_em, beneficio_id")
+      .select("valor_conta, desconto, incremental, pessoas, criado_em, beneficio_id")
       .eq("beneficio_id", ultimo.id)
       .single();
     if (e3) throw e3;
@@ -136,7 +138,14 @@ export type RespostaResgate =
  * Aplica o benefício. Idempotente: a função resgatar_beneficio trava o benefício e,
  * se já houver resgate, devolve o mesmo em vez de criar outro.
  */
-export async function aplicarBeneficio(beneficioId: string, valorContaEntrada: unknown): Promise<RespostaResgate> {
+export async function aplicarBeneficio(
+  beneficioId: string,
+  valorContaEntrada: unknown,
+  pessoasEntrada: unknown = 2,
+): Promise<RespostaResgate> {
+  const pessoas = Math.round(lerCampoNumero(pessoasEntrada ?? 2));
+  if (!Number.isInteger(pessoas) || pessoas < 1 || pessoas > 20)
+    throw new EntradaInvalidaError("Informe quantas pessoas estão na mesa (1 a 20).");
   const valorConta = Math.round(lerCampoNumero(valorContaEntrada) * 100) / 100;
   if (typeof beneficioId !== "string" || !/^[0-9a-f-]{36}$/i.test(beneficioId))
     throw new EntradaInvalidaError("Benefício inválido.");
@@ -155,7 +164,10 @@ export async function aplicarBeneficio(beneficioId: string, valorContaEntrada: u
     const agora = Date.now();
     const vencido = new Date(ben.valido_ate).getTime() <= agora;
     const cedo = !DEMO_ACEITA_ANTES_DA_JANELA && new Date(ben.valido_de).getTime() > agora;
-    if (ben.status !== "emitido" || vencido || cedo) return { ok: false, mensagem: "Este benefício não está mais ativo." };
+    // Campanha de várias semanas: fora da demo, só vale no dia e na faixa de hora de uma ocorrência.
+    const foraDaOcorrencia = !DEMO_ACEITA_ANTES_DA_JANELA && !dentroDeOcorrencia(campanha);
+    if (ben.status !== "emitido" || vencido || cedo || foraDaOcorrencia)
+      return { ok: false, mensagem: "Este benefício não está mais ativo." };
   }
 
   const agora = agoraNoFuso();
@@ -184,6 +196,7 @@ export async function aplicarBeneficio(beneficioId: string, valorContaEntrada: u
     p_incremental: incremental,
     p_data: agora.data,
     p_hora: agora.hora,
+    p_pessoas: pessoas,
   });
   if (e2) {
     if (String(e2.message).includes("beneficio_indisponivel")) return { ok: false, mensagem: "Este benefício não está mais ativo." };

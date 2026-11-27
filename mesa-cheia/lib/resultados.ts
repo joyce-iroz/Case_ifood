@@ -41,3 +41,14 @@ export function resumirCampanha(
     percentualIncremental: resgates.length ? Math.round((inc.length / resgates.length) * 1000) / 10 : null,
   };
 }
+
+/** Premissa das cadeiras recuperadas: cada mesa fica 1h30 em média. */
+export const PERMANENCIA_H = 1.5;
+
+/**
+ * Cadeiras-hora recuperadas: pessoas trazidas por resgates incrementais × permanência.
+ * Mesma unidade das cadeiras-hora vazias da grade, para comparar uma com a outra.
+ */
+export function cadeirasRecuperadas(resgates: { incremental: boolean; pessoas: number }[]): number {
+  return Math.round(resgates.filter((r) => r.incremental).reduce((a, r) => a + r.pessoas, 0) * PERMANENCIA_H);
+}

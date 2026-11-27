@@ -192,6 +192,7 @@ function CartaoAtivo({
   aoAplicar: (res: Extract<RespostaResgate, { ok: true }>) => void;
 }) {
   const [conta, setConta] = useState("");
+  const [pessoas, setPessoas] = useState(2);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const travado = useRef(false); // segura toque duplo antes do re-render
@@ -209,7 +210,7 @@ function CartaoAtivo({
       const resp = await fetch("/api/salao/aplicar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ beneficio_id: r.beneficioId, valor_conta: valorConta }),
+        body: JSON.stringify({ beneficio_id: r.beneficioId, valor_conta: valorConta, pessoas }),
       });
       const corpo = (await resp.json()) as RespostaResgate;
       if (!corpo.ok) throw new Error(corpo.mensagem);
@@ -237,6 +238,7 @@ function CartaoAtivo({
           </p>
         </div>
 
+        <div className="conta-e-mesa">
         <label className="campo-conta">
           <span className="so-leitor">Valor da conta</span>
           <span className="campo-moeda">
@@ -255,6 +257,19 @@ function CartaoAtivo({
             />
           </span>
         </label>
+        <div className="mesa" role="group" aria-label="Pessoas na mesa">
+          <button type="button" aria-label="Menos uma pessoa" onClick={() => setPessoas((n) => Math.max(1, n - 1))}>
+            −
+          </button>
+          <span>
+            <b>{pessoas}</b>
+            <small>{pessoas === 1 ? "pessoa" : "pessoas"}</small>
+          </span>
+          <button type="button" aria-label="Mais uma pessoa" onClick={() => setPessoas((n) => Math.min(20, n + 1))}>
+            +
+          </button>
+        </div>
+        </div>
 
         <div className="parciais">
           <div>

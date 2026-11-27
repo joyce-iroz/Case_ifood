@@ -122,10 +122,12 @@ export type LinhaCliente = {
   nome: string;
   visitas: number;
   ultima_visita: string | null;
-  origem: "delivery" | "salao";
+  origem: "delivery" | "salao" | "regiao";
   dia_habitual: number | null;
   turno_habitual: Turno | null;
   pedidos_delivery: number;
+  pedidos_cozinha_regiao?: number;
+  distancia_km?: number | null;
 };
 
 /** n-ésima ocorrência (0 = mais recente) do dia da semana antes de hoje. */
@@ -262,6 +264,23 @@ function gerarLinhasClientes(hoje: string, r: Restaurante, telefones: string[]):
       dia_habitual: j.dia,
       turno_habitual: j.turno,
       pedidos_delivery: 0,
+    });
+  }
+
+  // 214 clientes iFood da região: pedem italiana em outros restaurantes (2+ vezes em
+  // 60 dias, até 3 km) e nunca pediram nem sentaram aqui. Gerados por último para não
+  // mudar os telefones dos grupos acima.
+  for (let i = 0; i < 214; i++) {
+    clientes.push({
+      ...base(),
+      visitas: 0,
+      ultima_visita: null,
+      origem: "regiao",
+      dia_habitual: null,
+      turno_habitual: null,
+      pedidos_delivery: 0,
+      pedidos_cozinha_regiao: inteiro(2, 14),
+      distancia_km: Math.round((0.3 + rand() * 2.7) * 10) / 10,
     });
   }
 

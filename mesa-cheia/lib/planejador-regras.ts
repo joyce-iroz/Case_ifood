@@ -1,7 +1,8 @@
 // Planejador: tudo o que é número ou regra fica aqui, em código. Puro.
 // O modelo recebe um cardápio já calculado e só escolhe itens dele; a resposta
 // volta para `validarSaida`, e depois ainda passa por `avaliarProposta`.
-import { limiteValorFixo, type PropostaCampanha, type Regras } from "./campanha";
+import { lerNumeroBR } from "./numero";
+import { SEMANAS_MAX, limiteValorFixo, type PropostaCampanha, type Regras } from "./campanha";
 import { formatarHora, type Restaurante } from "./dominio";
 import type { JanelaCandidata } from "./janelas";
 import { SEGMENTOS, ehSegmento, type Segmento } from "./segmentos";
@@ -18,8 +19,25 @@ type TipoSaida = keyof typeof TIPOS_SAIDA;
 export const hhmm = (h: number) => `${String(Math.floor(h)).padStart(2, "0")}:${h % 1 ? "30" : "00"}`;
 /** "18:30" → 18.5; só hora cheia ou meia hora. */
 export function lerHHMM(s: unknown): number | null {
-  const m = typeof s === "string" ? s.trim().match(/^(\d{1,2}):(00|30)$/) : null;
-  return m ? Number(m[1]) + (m[2] === "30" ? 0.5 : 0) : null;
+  // Aceita "18:30", "18h30", "18h", "18:30:00". Só hora cheia ou meia hora.
+  const m = typeof s === "string" ? s.trim().toLowerCase().match(/^(\d{1,2})(?:[:h](00|30)?)?(?::00)?h?$/) : null;
+  if (!m) return null;
+  const h = Number(m[1]) + (m[2] === "30" ? 0.5 : 0);
+  return h >= 0 && h <= 24 ? h : null;
+}
+
+/** Tipo com sinônimos comuns ("percentual", "desconto_fixo"...). */
+function lerTipoSaida(t: unknown): TipoSaida | null {
+  const v = String(t ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (["desconto_percentual", "percentual", "porcentagem", "desconto_porcentagem", "percent"].includes(v)) return "desconto_percentual";
+  if (["desconto_valor", "valor_fixo", "desconto_fixo", "desconto_valor_fixo", "valor"].includes(v)) return "desconto_valor";
+  return null;
+}
+
+/** Número que o modelo pode ter escrito como texto: 15, "15", "15%", "R$ 300", "300,00". */
+function lerNumeroSaida(v: unknown): number {
+  if (typeof v === "number") return v;
+  return lerNumeroBR(String(v ?? "").replace(/%/g, "").trim());
 }
 
 /** Valores de desconto permitidos, calculados das regras. */
@@ -58,8 +76,11 @@ export type Cardapio = {
   regras: Regras;
   segmentos_descricao: Record<Segmento, string>;
   valores_permitidos: { desconto_percentual: number[]; desconto_valor: number[] };
+  semanas_permitidas?: number[]; // ausente em cardápios antigos: vale 1 a 4
   janelas_candidatas: JanelaCardapio[];
 };
+
+export const semanasDoCardapio = (c: Cardapio) => c.semanas_permitidas ?? [1, 2, 3, 4];
 
 export function montarCardapio(
   r: Restaurante,
@@ -71,6 +92,7 @@ export function montarCardapio(
     regras,
     segmentos_descricao: Object.fromEntries(SEGMENTOS.map((s) => [s.id, s.rotulo])) as Record<Segmento, string>,
     valores_permitidos: opcoesValor(regras, r),
+    semanas_permitidas: Array.from({ length: SEMANAS_MAX }, (_, i) => i + 1),
     janelas_candidatas: janelas.map(({ candidata: c, elegiveis, saldo, validade }) => ({
       dia_semana: DIAS_TEXTO[c.dia],
       hora_inicio: hhmm(c.inicio),
@@ -98,6 +120,7 @@ export type SaidaModelo = {
   valor: number;
   clientes_alvo: number;
   custo_maximo: number;
+  semanas?: number;
   justificativa: string;
 };
 
@@ -140,6 +163,8 @@ export function validarContraCardapio(p: PropostaCampanha, cardapio: Cardapio): 
     erros.push(`o segmento ${p.segmento} não tem clientes elegíveis nessa janela`);
   }
 
+  if (!semanasDoCardapio(cardapio).includes(p.semanas))
+    erros.push(`semanas ${p.semanas} não está em semanas_permitidas (${semanasDoCardapio(cardapio).join(", ")})`);
   const tipo = tipoDoCardapio(p.tipo);
   if (p.tipo === "percentual" && p.valor > cardapio.regras.desconto_max)
     erros.push(`valor ${p.valor}% está acima do desconto_max de ${cardapio.regras.desconto_max}%`);
@@ -173,11 +198,11 @@ function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: Alter
   if (dia < 0) erros.push(`dia_semana "${o.dia_semana}" inválido; use ${DIAS_TEXTO.join(", ")}`);
   if (inicio === null || fim === null) erros.push("hora_inicio e hora_fim precisam ser HH:MM em hora cheia ou meia hora");
   if (!ehSegmento(o.segmento)) erros.push(`segmento "${String(o.segmento)}" não existe; use ${SEGMENTOS.map((x) => x.id).join(", ")}`);
-  const tipo = o.tipo as TipoSaida;
-  if (!(tipo in TIPOS_SAIDA)) erros.push(`tipo "${String(o.tipo)}" inválido; use desconto_percentual ou desconto_valor`);
-  const valor = Number(o.valor);
-  const custo = Number(o.custo_maximo);
-  const alvo = Number(o.clientes_alvo);
+  const tipo = lerTipoSaida(o.tipo) as TipoSaida;
+  if (!tipo) erros.push(`tipo "${String(o.tipo)}" inválido; use desconto_percentual ou desconto_valor`);
+  const valor = lerNumeroSaida(o.valor);
+  const custo = lerNumeroSaida(o.custo_maximo);
+  const alvo = lerNumeroSaida(o.clientes_alvo);
   if (!Number.isFinite(valor)) erros.push("valor precisa ser número");
   if (!Number.isFinite(custo)) erros.push("custo_maximo precisa ser número");
   const just = typeof o.justificativa === "string" ? o.justificativa.trim() : "";
@@ -192,6 +217,7 @@ function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: Alter
     tipo: TIPOS_SAIDA[tipo],
     valor,
     teto: custo,
+    semanas: o.semanas === undefined || o.semanas === null ? 1 : lerNumeroSaida(o.semanas),
   };
   const { erros: doCardapio, janela } = validarContraCardapio(proposta, cardapio);
   erros.push(...doCardapio);
@@ -206,7 +232,20 @@ function validarItem(bruto: unknown, cardapio: Cardapio): { ok: true; alt: Alter
     alt: {
       janela,
       proposta,
-      saida: { ...(o as SaidaModelo), aposta, justificativa: just, valor, custo_maximo: custo, clientes_alvo: alvo },
+      // Formato canônico: o resto do código compara dia e horas como texto ("terca", "18:30").
+      saida: {
+        ...(o as SaidaModelo),
+        aposta,
+        dia_semana: DIAS_TEXTO[dia],
+        hora_inicio: hhmm(inicio!),
+        hora_fim: hhmm(fim!),
+        segmento: o.segmento as Segmento,
+        tipo,
+        justificativa: just,
+        valor,
+        custo_maximo: custo,
+        clientes_alvo: alvo,
+      },
     },
   };
 }
@@ -223,10 +262,13 @@ export function validarAlternativas(texto: string, cardapio: Cardapio): { valida
   } catch {
     return { validas: [], erros: ["a resposta não é um JSON válido"] };
   }
+  // {"propostas": [...]} é o pedido; aceita também o array puro ou outra chave com array.
   const lista = Array.isArray(bruto)
     ? bruto
-    : bruto && typeof bruto === "object" && Array.isArray((bruto as { propostas?: unknown }).propostas)
-      ? (bruto as { propostas: unknown[] }).propostas
+    : bruto && typeof bruto === "object"
+      ? (((bruto as Record<string, unknown>).propostas as unknown[] | undefined) ??
+        (Object.values(bruto as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined) ??
+        null)
       : null;
   if (!lista) return { validas: [], erros: ["a resposta precisa ser um array JSON com 3 propostas"] };
 
@@ -331,6 +373,7 @@ export function propostaFallback(
         tipo: "percentual",
         valor,
         teto: custo,
+        semanas: 1,
       },
     };
   }

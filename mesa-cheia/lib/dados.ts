@@ -1,7 +1,7 @@
 import "server-only";
 import { supabaseServidor } from "./supabase/server";
 import { RESTAURANTE_DEMO_ID, hojeNoFuso, horaDoTime, somarDias, type Restaurante } from "./dominio";
-import type { Segmento, VisitaCliente } from "./segmentos";
+import type { Origem, Segmento, VisitaCliente } from "./segmentos";
 import type { TipoBeneficio } from "./campanha";
 import { lerCampoNumero } from "./numero";
 import { calcularOcupacao, type RegistroOcupacao, type ResumoOcupacao } from "./ocupacao";
@@ -85,7 +85,7 @@ export async function obterResumoOcupacao(
 export type ClienteBase = {
   id: string;
   nome: string;
-  origem: "delivery" | "salao";
+  origem: Origem;
   telefone_hash: string;
   telefone_final: string;
 };
@@ -123,8 +123,15 @@ export type CampanhaRegistro = {
   teto: number;
   status: string;
   data_janela: string;
+  semanas: number;
+  controle_pct: number;
+  pausada_em: string | null;
+  motivo_pausa: string | null;
   criado_em: string;
 };
+
+export const COLUNAS_CAMPANHA =
+  "id, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, teto, status, data_janela, semanas, controle_pct, pausada_em, motivo_pausa, criado_em";
 
 export type BeneficioRegistro = {
   id: string;
@@ -142,6 +149,7 @@ export type ResgateRegistro = {
   valor_conta: number;
   desconto: number;
   incremental: boolean;
+  pessoas: number;
   criado_em: string;
 };
 
@@ -152,6 +160,10 @@ export function lerCampanha(c: Record<string, unknown>): CampanhaRegistro {
     hora_fim: horaDoTime(String(c.hora_fim)),
     valor: Number(c.valor),
     teto: Number(c.teto),
+    semanas: Number(c.semanas ?? 1),
+    controle_pct: Number(c.controle_pct ?? 0),
+    pausada_em: (c.pausada_em as string | null) ?? null,
+    motivo_pausa: (c.motivo_pausa as string | null) ?? null,
   };
 }
 
@@ -159,6 +171,7 @@ export const lerResgate = (r: Record<string, unknown>): ResgateRegistro => ({
   ...(r as unknown as ResgateRegistro),
   valor_conta: Number(r.valor_conta),
   desconto: Number(r.desconto),
+  pessoas: Number(r.pessoas ?? 2),
 });
 
 /** Campanhas do restaurante com seus benefícios e resgates. Volume de demo: cabe em memória. */
@@ -168,7 +181,7 @@ export async function carregarCampanhasCompletas(id = RESTAURANTE_DEMO_ID) {
     await paginar<Record<string, unknown>>((i, f) =>
       db
         .from("campanhas")
-        .select("id, dia_semana, hora_inicio, hora_fim, segmento, tipo, valor, teto, status, data_janela, criado_em")
+        .select(COLUNAS_CAMPANHA)
         .eq("restaurante_id", id)
         .order("criado_em", { ascending: false })
         .order("id")
@@ -177,9 +190,15 @@ export async function carregarCampanhasCompletas(id = RESTAURANTE_DEMO_ID) {
   ).map(lerCampanha);
 
   const ids = campanhas.map((c) => c.id);
-  if (ids.length === 0) return { campanhas, beneficios: [] as BeneficioRegistro[], resgates: [] as ResgateRegistro[] };
+  if (ids.length === 0)
+    return {
+      campanhas,
+      beneficios: [] as BeneficioRegistro[],
+      resgates: [] as ResgateRegistro[],
+      controles: [] as { campanha_id: string; cliente_id: string }[],
+    };
 
-  const [beneficios, resgates] = await Promise.all([
+  const [beneficios, resgates, controles] = await Promise.all([
     paginar<BeneficioRegistro>((i, f) =>
       db
         .from("beneficios")
@@ -191,13 +210,16 @@ export async function carregarCampanhasCompletas(id = RESTAURANTE_DEMO_ID) {
     paginar<Record<string, unknown>>((i, f) =>
       db
         .from("resgates")
-        .select("beneficio_id, valor_conta, desconto, incremental, criado_em, beneficios!inner(campanha_id)")
+        .select("beneficio_id, valor_conta, desconto, incremental, pessoas, criado_em, beneficios!inner(campanha_id)")
         .in("beneficios.campanha_id", ids)
         .order("id")
         .range(i, f),
     ).then((rs) => rs.map(lerResgate)),
+    paginar<{ campanha_id: string; cliente_id: string }>((i, f) =>
+      db.from("controles").select("campanha_id, cliente_id").in("campanha_id", ids).order("cliente_id").range(i, f),
+    ),
   ]);
-  return { campanhas, beneficios, resgates };
+  return { campanhas, beneficios, resgates, controles };
 }
 
 /** Benefícios emitidos cuja validade passou viram 'expirado'. Chamado nas leituras. */

@@ -5,6 +5,7 @@ import { Marca } from "@/components/Marca";
 import { FormCampanha } from "@/components/FormCampanha";
 import { FormRegras } from "@/components/FormRegras";
 import { KitAtivacao } from "@/components/KitAtivacao";
+import { BotaoSimularCheia } from "@/components/BotaoSimularCheia";
 import { Planejador } from "@/components/Planejador";
 import { Tentativas } from "@/components/Tentativas";
 import { listarPlanejamentos, type PlanejamentoView } from "@/lib/planejador";
@@ -98,7 +99,13 @@ export default async function Dono({ searchParams }: { searchParams: Promise<{ r
         )}
 
         {resumo && resumo.celulas.length > 0 && painel && form?.ctx && regrasInfo && (
-          <Indicadores resumo={resumo} painel={painel.campanhas} ctx={form.ctx} regras={regrasInfo} />
+          <Indicadores
+            resumo={resumo}
+            painel={painel.campanhas}
+            ctx={form.ctx}
+            regras={regrasInfo}
+            recuperadas={painel.cadeirasRecuperadas30d}
+          />
         )}
 
         {resumo && resumo.celulas.length > 0 && (
@@ -162,11 +169,13 @@ function Indicadores({
   painel,
   ctx,
   regras,
+  recuperadas,
 }: {
   resumo: ResumoOcupacao;
   painel: CampanhaPainel[];
   ctx: ContextoJanela;
   regras: Regras;
+  recuperadas: number;
 }) {
   const pior = janelaMaisVazia(resumo);
   const resgates = painel.reduce((s, c) => s + c.resultado.resgatados, 0);
@@ -202,6 +211,13 @@ function Indicadores({
         </a>
       </div>
       <div className="kpi">
+        <span className="kpi-rotulo">Cadeiras-hora recuperadas · 30 dias</span>
+        <span className={`kpi-valor ${recuperadas > 0 ? "verde" : ""}`}>{fmt.format(recuperadas)}</span>
+        <span className="kpi-nota">
+          de {fmt.format(resumo.cadeirasHoraVazias30d)} vazias · pessoas trazidas por resgate incremental × 1h30
+        </span>
+      </div>
+      <div className="kpi">
         <span className="kpi-rotulo">Resgates</span>
         <span className="kpi-valor">{resgates}</span>
         <span className="kpi-nota">
@@ -235,10 +251,11 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
               <th scope="col">Canibalizados</th>
               <th scope="col">Custo em descontos</th>
               <th scope="col">Custo por cliente incremental</th>
+              <th scope="col">Efeito vs controle</th>
             </tr>
           </thead>
           <tbody>
-            {campanhas.map(({ campanha: c, resultado: r }) => {
+            {campanhas.map(({ campanha: c, resultado: r, controle: k, ativa }) => {
               const alerta = canibalizadoEmAlerta(r);
               return (
                 <tr key={c.id}>
@@ -246,7 +263,18 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
                     <b>{descricaoCampanha(c)}</b> <span className="legenda">{formatarDataCurta(c.data_janela)}</span>
                     <span className="sub">
                       {rotuloSegmento(c.segmento)} · {textoBeneficio(c.tipo, c.valor)} · teto {formatarMoeda(c.teto)}
+                      {c.semanas > 1 && ` · ${c.semanas} semanas`}
                     </span>
+                    {c.status === "pausada" && (
+                      <span className="sub pausa">
+                        <span className="selo selo-demo">pausada</span> {c.motivo_pausa}
+                      </span>
+                    )}
+                    {ativa && (
+                      <span className="sub">
+                        <BotaoSimularCheia campanhaId={c.id} />
+                      </span>
+                    )}
                   </th>
                   <td>{r.emitidos}</td>
                   <td>
@@ -270,6 +298,29 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
                   <td>
                     <b>{moeda(r.custoPorIncremental)}</b>
                   </td>
+                  <td>
+                    {k.estado === "sem_controle" && <span className="legenda">sem controle</span>}
+                    {k.estado === "aguardando" && (
+                      <>
+                        <span className="legenda">aguardando a janela</span>
+                        <span className="sub">{k.tamanhoControle} no controle</span>
+                      </>
+                    )}
+                    {k.estado === "medido" && (
+                      <>
+                        <b className={k.lift > 2 ? "verde" : k.lift < -2 ? "alerta-texto" : undefined}>
+                          {k.lift > 0 ? "+" : ""}
+                          {fmt.format(k.lift)} pts
+                        </b>
+                        <span className="sub">
+                          {fmt.format(k.taxaTratados)}% × {fmt.format(k.taxaControle)}% vieram
+                        </span>
+                        <span className="sub">
+                          {k.visitasAMais > 0 ? `${k.visitasAMais} visitas causadas` : "sem efeito: viriam igual"}
+                        </span>
+                      </>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -284,6 +335,9 @@ function Resultados({ campanhas }: { campanhas: CampanhaPainel[] }) {
         <br />
         Canibalizado = desconto dado a cliente que já frequentava aquela janela. Reduzir esse número é o objetivo de
         escolher janela e público, em vez de anunciar desconto para todo mundo.
+        <br />
+        Efeito vs controle = % de quem recebeu o benefício que veio na janela menos % do grupo sorteado para não
+        receber que veio mesmo assim. É a medida do efeito real; o incremental do resgate é uma aproximação.
       </p>
 
       {campanhas.map(({ campanha: c, beneficios }) => (

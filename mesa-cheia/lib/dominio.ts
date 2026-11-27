@@ -100,6 +100,12 @@ export function formatarDataCurta(data: string): string {
   return `${NOMES_DIA[diaDaSemana(data)].toLowerCase()} ${d}/${m}`;
 }
 
+/** "ter 01/12, 18h–23h" ou, com várias semanas, "ter 01/12 a ter 22/12, 18h–23h" */
+export function formatarValidade(datas: string[], inicio: number, fim: number): string {
+  if (datas.length <= 1) return formatarJanela(datas[0], inicio, fim);
+  return `${formatarDataCurta(datas[0])} a ${formatarDataCurta(datas.at(-1)!)} (${datas.length} semanas), ${formatarHora(inicio)}–${formatarHora(fim)}`;
+}
+
 /** "ter 01/12, 18h–23h" */
 export function formatarJanela(data: string, inicio: number, fim: number): string {
   return `${formatarDataCurta(data)}, ${formatarHora(inicio)}–${formatarHora(fim)}`;

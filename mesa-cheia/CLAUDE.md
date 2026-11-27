@@ -34,8 +34,12 @@ Feito: schema, seed (`POST /api/reset`), grade de ocupação, criação de
 campanha por formulário com emissão de benefícios, tela do salão (consulta por
 telefone e resgate), resultado por campanha, painel "Telefones de teste",
 editor de regras, planejador de campanhas com IA (três alternativas, editor
-restrito ao cardápio, prévia ao vivo), kit de ativação gerado por IA e métricas
-de incremental × canibalizado.
+restrito ao cardápio, prévia ao vivo), kit de ativação gerado por IA, métricas
+de incremental × canibalizado, grupo de controle (efeito medido), projeção de
+retorno antes de aprovar, segmento "mesma cozinha na região" (clientes iFood de
+outros restaurantes, anônimos para o restaurante), campanhas de 1 a 4 semanas com
+pausa automática por ocupação, cadeiras-hora recuperadas e a página pública de
+diagnóstico para captar restaurantes novos (`/diagnostico`, grava em `leads`).
 
 A IA entra em dois pontos, e nos dois só escolhe ou escreve:
 1. Planejador: escolhe alternativas dentro de um cardápio calculado em código.
@@ -101,9 +105,14 @@ app/
   api/planejador/diagnostico     GET: qual variável de chave existe + chamada de teste
   api/kits/[campanhaId]/entregue POST: dono copiou a mensagem da equipe
   api/regras             GET / PATCH
+  api/ocupacao/registrar POST {data, hora, pessoas}: o que um caixa enviaria; confere pausas
+  api/campanhas/[id]/simular-cheia  POST (DEMO): 85% na 1ª ocorrência, para mostrar a pausa
+  api/leads              POST: restaurante interessado (diagnóstico recalculado no servidor)
+  diagnostico/page.tsx   página pública de diagnóstico para restaurantes novos
 components/
   BotaoResetar.tsx, FormCampanha.tsx, Salao.tsx, Planejador.tsx, FormRegras.tsx,
-  KitAtivacao.tsx        componentes de cliente
+  KitAtivacao.tsx, BotaoSimularCheia.tsx, Diagnostico.tsx   componentes de cliente
+  Projecao.tsx           quadro de retorno esperado (sem estado)
   Tentativas.tsx         lista de tentativas do modelo (sem estado)
   Marca.tsx              logo (server)
 lib/
@@ -120,6 +129,12 @@ lib/
   kit-regras.ts          validação e template do kit, conferência de números (puro)
   kit.ts                 gerarKit, carregarKits, marcarKitEntregue ("server-only")
   numero.ts              lerNumeroBR, formatarNumeroBR, lerCampoNumero (puro)
+  projecao.ts            taxas por segmento e projeção de retorno (puro)
+  controle.ts            sorteio e medição do grupo de controle (puro)
+  diagnostico.ts         conta da página de diagnóstico (puro)
+  pausa.ts               verificarPausas, registrarOcupacao, simular ("server-only")
+  leads.ts               salvarLead ("server-only")
+  seed-historico.ts      campanhas antigas com resgates e controle (puro)
   segmentos.ts           segmentos e visitouNaJanela (puro)
   resultados.ts          métricas por campanha (puro)
   ocupacao.ts            cálculo da grade (puro)
@@ -283,6 +298,39 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   descontos deles; `percentualIncremental` = incrementais / resgatados. O
   painel pinta o canibalizado de alerta acima de 40% do custo
   (`canibalizadoEmAlerta`).
+- **Grupo de controle.** Na emissão, com 10 ou mais elegíveis, 20% são
+  sorteados (`sortearControle`) para não receber; vão para `controles`.
+  `medirControle` compara, nas ocorrências já passadas, a % de tratados com
+  visita na janela contra a % do controle: `lift` em pontos e visitas causadas.
+  É a medida do efeito real; `incremental` do resgate é a aproximação. Quem
+  está no controle conta como "já teve oferta" para `dias_entre_ofertas`, para
+  não contaminar a medição.
+- **Projeção de retorno** (`projetar`, lib/projecao.ts): taxa de resgate e de
+  incremental por segmento vêm das campanhas encerradas (`calcularTaxas`,
+  mínimo de 20 emitidos / 3 resgates); sem isso, 8% de resgate e incremental
+  pela definição do segmento (0 para `frequenta_janela`, 1 para os outros).
+  Premissa de semanas: cada semana extra soma metade da taxa, até dobrar.
+  Aparece na prévia do planejador e no formulário manual (mesma função).
+- **Segmento `cozinha_similar`** = clientes `origem = 'regiao'`: pedem a mesma
+  cozinha em outros restaurantes (2+ vezes em 60 dias, até 3 km) e nunca
+  vieram. Dado da plataforma: o restaurante vê só contagens; na lista de
+  benefícios aparecem como "Cliente da região (via iFood)" (`segmentoAnonimo`).
+  O seed cria 214, gerados por último para não mudar os telefones da demo.
+- **Duração e pausa.** `semanas` (1 a 4): `data_janela` é a primeira
+  ocorrência; `valido_ate` é o fim da última (`ocorrencias`, `fimDaCampanha`).
+  Fora da demo, o resgate só vale dentro de uma ocorrência
+  (`dentroDeOcorrencia`). O teto inteiro conta no mês da primeira ocorrência.
+  `motivoDePausa`: se uma ocorrência registrou ocupação média ≥ `ocupacao_min`
+  (tabela `ocupacao`, alimentada por `/api/ocupacao/registrar`), a campanha
+  vira `pausada` e os benefícios não usados expiram. `verificarPausas` roda ao
+  carregar o painel e a cada registro.
+- **Cadeiras-hora recuperadas** = soma de `resgates.pessoas` dos resgates
+  incrementais × 1h30 (`PERMANENCIA_H`), nos últimos 30 dias, comparada às
+  cadeiras-hora vazias. O salão pergunta quantas pessoas estão na mesa (padrão 2).
+- **Diagnóstico de captação** (`/diagnostico`): o dono marca cada turno como
+  cheio (90%), médio (60%) ou vazio (35%); a conta (`diagnosticar`) dá
+  cadeiras-hora vazias por mês e quanto 5% de recuperação dos turnos vazios
+  renderia. O interesse vai para `leads`, com o resultado recalculado no servidor.
 - **Janelas em meia hora.** `hora_inicio`/`hora_fim` são números em horas com
   ,5 para meia hora (18.5 = 18h30); `timeDaHora`/`horaDoTime`/`formatarHora`
   convertem. Uma visita registrada na hora cheia h conta para a janela se a
@@ -332,10 +380,12 @@ ao desenho original, necessárias para a demo.
 | nome | text | |
 | visitas | integer | visitas ao salão |
 | ultima_visita | date null | null = nunca veio ao salão |
-| origem | text | `'delivery'` \| `'salao'` |
+| origem | text | `'delivery'` \| `'salao'` \| `'regiao'` (cliente iFood de outros restaurantes) |
 | dia_habitual † | smallint null | janela habitual no salão |
 | turno_habitual † | text null | `'almoco'` \| `'jantar'` |
 | pedidos_delivery † | integer | |
+| pedidos_cozinha_regiao † | integer | pedidos da mesma cozinha em outros restaurantes, 60 dias |
+| distancia_km † | numeric null | |
 
 Índices: `(restaurante_id, dia_habitual, turno_habitual)`,
 `(restaurante_id, origem)`, `(restaurante_id, ultima_visita)`.
@@ -380,8 +430,11 @@ resposta "já usado" no salão.
 | tipo | text | `percentual` (valor em %) \| `valor_fixo` (valor em R$) |
 | valor | numeric(10,2) | > 0 |
 | teto | numeric(10,2) | gasto máximo da campanha em descontos, R$ |
-| status | text | `ativa` \| `encerrada` |
-| data_janela † | date | dia em que os benefícios valem |
+| status | text | `ativa` \| `encerrada` \| `pausada` |
+| data_janela † | date | primeira ocorrência |
+| semanas † | smallint | 1 a 4 |
+| controle_pct † | numeric | % sorteado para o controle (0 se < 10 elegíveis) |
+| pausada_em †, motivo_pausa † | timestamptz, text | pausa automática |
 | criado_em † | timestamptz | |
 
 Índice: `(restaurante_id, data_janela)`.
@@ -411,6 +464,7 @@ resposta "já usado" no salão.
 | desconto | numeric(10,2) | |
 | criado_em | timestamptz | default now() |
 | incremental | boolean | a visita não teria acontecido sem o benefício |
+| pessoas † | smallint | pessoas na mesa (1 a 20), base das cadeiras recuperadas |
 
 Índice: `criado_em` (consumo do `teto_mes`).
 
@@ -465,8 +519,15 @@ resposta "já usado" no salão.
 | criado_em | timestamptz | |
 | entregue_em † | timestamptz null | quando o dono copiou a mensagem da equipe |
 
+### controles †
+`(campanha_id, cliente_id)` pk, fk com cascade. Sorteados para não receber.
+
+### leads †
+`id, criado_em, nome, contato, diagnostico jsonb` (entrada + resultado).
+Contato do dono do restaurante interessado. Não é ligado a `restaurantes`.
+
 ### Função `resgatar_beneficio`
-`(p_beneficio_id, p_valor_conta, p_desconto, p_incremental, p_data, p_hora) → jsonb`.
+`(p_beneficio_id, p_valor_conta, p_desconto, p_incremental, p_data, p_hora, p_pessoas) → jsonb`.
 Trava o benefício, devolve o resgate existente se houver (`novo: false`),
 senão trava a campanha, limita o desconto ao teto restante, grava o resgate,
 marca o benefício como `resgatado`, grava a visita e atualiza o cliente.
@@ -486,5 +547,5 @@ Execução só para `service_role`.
   emitidos, foraPorIntervalo, validade}` ou 422 `{ok: false, bloqueios:
   [{regra, mensagem}]}`.
 - `POST /api/salao/consultar {telefone}` → `{tipo: "ativo" | "nenhum" | "resgatado", ...}`.
-- `POST /api/salao/aplicar {beneficio_id, valor_conta}` → `{ok, novo,
+- `POST /api/salao/aplicar {beneficio_id, valor_conta, pessoas}` → `{ok, novo,
   valorConta, desconto, aPagar, resgatadoEm}`; 409 se o benefício não está ativo.

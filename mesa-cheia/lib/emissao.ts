@@ -8,7 +8,7 @@ import {
   carregarRestaurante,
   obterResumoOcupacao,
 } from "./dados";
-import { RESTAURANTE_DEMO_ID, formatarJanela, hojeNoFuso, timeDaHora } from "./dominio";
+import { RESTAURANTE_DEMO_ID, formatarJanela, formatarValidade, hojeNoFuso, timeDaHora } from "./dominio";
 import {
   comprometidoNoMes,
   gerarCodigos,
@@ -16,6 +16,9 @@ import {
   lerProposta,
   limiteValorFixo,
   textoBeneficio,
+  fimDaCampanha,
+  CONTROLE_PCT,
+  CONTROLE_MIN_ELEGIVEIS,
   proximaJanela,
   separarPorIntervalo,
   validarProposta,
@@ -25,6 +28,8 @@ import {
 } from "./campanha";
 import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmento } from "./segmentos";
 import { gerarKit } from "./kit";
+import { calcularTaxas, type Taxas } from "./projecao";
+import { sortearControle } from "./controle";
 import { janelaNatural } from "./kit-regras";
 import type { ResumoOcupacao } from "./ocupacao";
 
@@ -62,19 +67,47 @@ export async function carregarBase(id = RESTAURANTE_DEMO_ID) {
   const campanhasComGasto = campanhasCompletas.campanhas.map((c) => ({ ...c, gasto: gastoPorCampanha.get(c.id) ?? 0 }));
 
   const ultimaOferta = new Map<string, string>();
-  for (const b of campanhasCompletas.beneficios) {
-    const atual = ultimaOferta.get(b.cliente_id);
-    if (!atual || b.criado_em > atual) ultimaOferta.set(b.cliente_id, b.criado_em);
-  }
+  const registrar = (cliente: string, quando: string) => {
+    const atual = ultimaOferta.get(cliente);
+    if (!atual || quando > atual) ultimaOferta.set(cliente, quando);
+  };
+  for (const b of campanhasCompletas.beneficios) registrar(b.cliente_id, b.criado_em);
+  // Quem foi sorteado para o controle também conta como "já teve oferta": recebê-la de
+  // outra campanha logo em seguida contaminaria a medição.
+  const criadaEm = new Map(campanhasCompletas.campanhas.map((c) => [c.id, c.criado_em]));
+  for (const k of campanhasCompletas.controles) registrar(k.cliente_id, criadaEm.get(k.campanha_id)!);
 
-  return { id, hoje, restaurante, regras, resumo, clientes: base, campanhasComGasto, ultimaOferta };
+  // Taxas históricas por segmento, das campanhas que já terminaram: base da projeção.
+  const agoraMs = Date.now();
+  const emitidosPor = new Map<string, number>();
+  for (const b of campanhasCompletas.beneficios) emitidosPor.set(b.campanha_id, (emitidosPor.get(b.campanha_id) ?? 0) + 1);
+  const resgatesPor = new Map<string, { n: number; inc: number }>();
+  for (const r of campanhasCompletas.resgates) {
+    const c = campanhaDoBeneficio.get(r.beneficio_id)!;
+    const acc = resgatesPor.get(c) ?? { n: 0, inc: 0 };
+    acc.n += 1;
+    if (r.incremental) acc.inc += 1;
+    resgatesPor.set(c, acc);
+  }
+  const taxas = calcularTaxas(
+    campanhasCompletas.campanhas
+      .filter((c) => c.status === "pausada" || new Date(fimDaCampanha(c)).getTime() <= agoraMs)
+      .map((c) => ({
+        segmento: c.segmento,
+        emitidos: emitidosPor.get(c.id) ?? 0,
+        resgates: resgatesPor.get(c.id)?.n ?? 0,
+        incrementais: resgatesPor.get(c.id)?.inc ?? 0,
+      })),
+  );
+
+  return { id, hoje, restaurante, regras, resumo, clientes: base, campanhasComGasto, ultimaOferta, taxas };
 }
 
 export type Base = Awaited<ReturnType<typeof carregarBase>>;
 
 /** O que as regras dizem de uma janela: segmentos, elegíveis, teto do mês, ocupação. Puro sobre a base. */
-export function avaliarJanela(base: Base, janela: Janela) {
-  const proxima = proximaJanela(janela);
+export function avaliarJanela(base: Base, janela: Janela, semanas = 1) {
+  const proxima = proximaJanela(janela, undefined, semanas);
   const mes = proxima.data.slice(0, 7);
   const comprometido = comprometidoNoMes(base.campanhasComGasto, mes);
 
@@ -111,9 +144,12 @@ export type ContextoJanela = {
   regras: Regras;
   limiteValorFixo: number;
   ticketMedio: number;
+  taxas: Taxas;               // para a projeção de retorno no formulário
+  controlePct: number;        // % dos elegíveis que vai para o grupo de controle
+  controleMinimo: number;     // abaixo disso não há controle
 };
 
-export function resumirContexto(ctx: ReturnType<typeof avaliarJanela>, janela: Janela): ContextoJanela {
+export function resumirContexto(ctx: ReturnType<typeof avaliarJanela>, janela: Janela, taxas: Taxas): ContextoJanela {
   const contagens = {} as ContextoJanela["contagens"];
   for (const s of SEGMENTOS) {
     contagens[s.id] = {
@@ -130,12 +166,20 @@ export function resumirContexto(ctx: ReturnType<typeof avaliarJanela>, janela: J
     regras: ctx.regras,
     limiteValorFixo: limiteValorFixo(ctx.regras, ctx.restaurante),
     ticketMedio: ctx.restaurante.ticket_medio,
+    taxas,
+    controlePct: CONTROLE_PCT,
+    controleMinimo: CONTROLE_MIN_ELEGIVEIS,
   };
 }
 
+/** Quantos dos elegíveis vão para o controle (os demais recebem o benefício). */
+export const tamanhoControle = (elegiveis: number) =>
+  elegiveis >= CONTROLE_MIN_ELEGIVEIS ? Math.round((elegiveis * CONTROLE_PCT) / 100) : 0;
+
 /** Contagem por segmento e números de contexto para o formulário. */
 export async function contextoDaJanela(janela: Janela): Promise<ContextoJanela> {
-  return resumirContexto(avaliarJanela(await carregarBase(), janela), janela);
+  const base = await carregarBase();
+  return resumirContexto(avaliarJanela(base, janela), janela, base.taxas);
 }
 
 export type Avaliacao =
@@ -156,7 +200,7 @@ export function avaliarProposta(entrada: unknown, base: Base): Avaliacao {
   const lida = lerProposta(entrada);
   if ("bloqueios" in lida) return { ok: false, bloqueios: lida.bloqueios };
   const p = lida.proposta;
-  const ctx = avaliarJanela(base, janelaDa(p));
+  const ctx = avaliarJanela(base, janelaDa(p), p.semanas);
 
   const bloqueios = validarProposta(p, {
     restaurante: ctx.restaurante,
@@ -185,6 +229,7 @@ export type ResultadoCriacao =
       ok: true;
       campanhaId: string;
       emitidos: number;
+      controle: number;
       foraPorIntervalo: number;
       validade: string;
       regras: Regras;
@@ -216,13 +261,20 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
       teto: p.teto,
       status: "ativa",
       data_janela: ctx.proxima.data,
+      semanas: p.semanas,
+      controle_pct: tamanhoControle(elegiveis.length) ? CONTROLE_PCT : 0,
     })
     .select("id")
     .single();
   if (error) throw error;
 
-  const codigos = gerarCodigos(elegiveis.length, () => randomInt(10_000));
-  const linhas = elegiveis.map((cliente_id, i) => ({
+  // Grupo de controle: sorteio de 20% dos elegíveis, que não recebem o benefício.
+  const { tratados, controle } = tamanhoControle(elegiveis.length)
+    ? sortearControle(elegiveis, CONTROLE_PCT, () => randomInt(1_000_000) / 1_000_000)
+    : { tratados: elegiveis, controle: [] as string[] };
+
+  const codigos = gerarCodigos(tratados.length, () => randomInt(10_000));
+  const linhas = tratados.map((cliente_id, i) => ({
     campanha_id: campanha.id,
     cliente_id,
     codigo: codigos[i],
@@ -230,10 +282,15 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
     valido_ate: ctx.proxima.valido_ate,
     status: "emitido",
   }));
-  const emissao = await db.from("beneficios").insert(linhas);
-  if (emissao.error) {
+  const [emissao, ctrl] = await Promise.all([
+    db.from("beneficios").insert(linhas),
+    controle.length
+      ? db.from("controles").insert(controle.map((cliente_id) => ({ campanha_id: campanha.id, cliente_id })))
+      : Promise.resolve({ error: null }),
+  ]);
+  if (emissao.error || ctrl.error) {
     await db.from("campanhas").delete().eq("id", campanha.id);
-    throw emissao.error;
+    throw emissao.error ?? ctrl.error;
   }
 
   // Kit de ativação: uma vez, logo depois da emissão. gerarKit nunca lança; se tudo
@@ -244,7 +301,7 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
       cozinha: ctx.restaurante.cozinha,
       ticket_medio: ctx.restaurante.ticket_medio,
     },
-    janela: janelaNatural(p.dia_semana, p.hora_inicio, p.hora_fim),
+    janela: janelaNatural(p.dia_semana, p.hora_inicio, p.hora_fim, p.semanas),
     beneficio: textoBeneficio(p.tipo, p.valor),
     segmento: rotuloSegmento(p.segmento),
   }, { tipo: p.tipo, valor: p.valor });
@@ -252,9 +309,10 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
   return {
     ok: true,
     campanhaId: campanha.id,
-    emitidos: elegiveis.length,
+    emitidos: tratados.length,
+    controle: controle.length,
     foraPorIntervalo: recentes.length,
-    validade: formatarJanela(ctx.proxima.data, p.hora_inicio, p.hora_fim),
+    validade: formatarValidade(ctx.proxima.datas, p.hora_inicio, p.hora_fim),
     regras: ctx.regras,
     kit: { gerado: !!kit, modelo: kit?.modelo ?? null },
   };

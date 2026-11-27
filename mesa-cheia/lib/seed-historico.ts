@@ -15,6 +15,8 @@ type Plano = {
   emitir: number;
   resgatar: number;
   kitEntregue: boolean;
+  controle: number;      // sorteados para não receber
+  controleVeio: number;  // quantos do controle vieram mesmo assim
 };
 
 export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: () => string) {
@@ -25,18 +27,22 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
 
   const planos: Plano[] = [
     {
-      proposta: { dia_semana: 2, hora_inicio: 18, hora_fim: 23, segmento: "delivery_nunca_veio", tipo: "percentual", valor: 15, teto: 300 },
+      proposta: { dia_semana: 2, hora_inicio: 18, hora_fim: 23, segmento: "delivery_nunca_veio", tipo: "percentual", valor: 15, teto: 300, semanas: 1 },
       publico: (c) => c.linha.origem === "delivery",
       emitir: 50,
       resgatar: 9,
       kitEntregue: true,
+      controle: 12,
+      controleVeio: 0, // quem nunca veio ao salão não aparece sozinho: o efeito é todo da campanha
     },
     {
-      proposta: { dia_semana: 2, hora_inicio: 18, hora_fim: 23, segmento: "frequenta_janela", tipo: "percentual", valor: 10, teto: 200 },
+      proposta: { dia_semana: 2, hora_inicio: 18, hora_fim: 23, segmento: "frequenta_janela", tipo: "percentual", valor: 10, teto: 200, semanas: 1 },
       publico: (c) => c.linha.dia_habitual === 2 && c.linha.turno_habitual === "jantar" && c.visitas.some((v) => v.data >= somarDias(hoje, -60)),
       emitir: 30,
       resgatar: 10,
       kitEntregue: false,
+      controle: 8,
+      controleVeio: 3, // quem já vinha às terças veio mesmo sem desconto: o efeito é perto de zero
     },
   ];
 
@@ -44,6 +50,7 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
   const beneficios: Record<string, unknown>[] = [];
   const resgates: Record<string, unknown>[] = [];
   const kits: Record<string, unknown>[] = [];
+  const controles: { campanha_id: string; cliente_id: string }[] = [];
   const visitasNovas: { cliente_id: string; data: string; hora: number }[] = [];
 
   for (const plano of planos) {
@@ -61,10 +68,17 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
       teto: p.teto,
       status: "encerrada",
       data_janela: data,
+      semanas: 1,
+      controle_pct: 20,
       criado_em: criadoEm,
     });
 
-    const alvo = clientes.filter(plano.publico).slice(0, plano.emitir);
+    const publico = clientes.filter(plano.publico);
+    const alvo = publico.slice(0, plano.emitir);
+    publico.slice(plano.emitir, plano.emitir + plano.controle).forEach((c, i) => {
+      controles.push({ campanha_id: campanhaId, cliente_id: c.id });
+      if (i < plano.controleVeio) visitasNovas.push({ cliente_id: c.id, data, hora: 20 });
+    });
     let gasto = 0;
     const passo = Math.max(1, Math.floor(alvo.length / plano.resgatar)); // resgata 1 a cada `passo`
     alvo.forEach((c, i) => {
@@ -92,6 +106,7 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
         valor_conta: conta,
         desconto,
         incremental,
+        pessoas: 1 + Math.floor(rand() * 4),
         criado_em: `${data}T${timeDaHora(hora + 0.5)}-03:00`,
       });
       visitasNovas.push({ cliente_id: c.id, data, hora });
@@ -112,5 +127,5 @@ export function gerarHistorico(hoje: string, clientes: ClienteComId[], novoId: (
     });
   }
 
-  return { campanhas, beneficios, resgates, kits, visitasNovas, data };
+  return { campanhas, beneficios, resgates, kits, controles, visitasNovas, data };
 }

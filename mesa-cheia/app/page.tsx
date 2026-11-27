@@ -36,6 +36,18 @@ export default function Inicio() {
           </div>
           <span className="chamada">Abrir teclado →</span>
         </Link>
+        <Link href="/diagnostico" className="papel papel-novo">
+          <div className="mini-grade" aria-hidden="true">
+            {MINI.slice(0, 6).map((c, i) => (
+              <span key={i} className={i % 2 ? "c-n1" : c} />
+            ))}
+          </div>
+          <div>
+            <strong>Tenho um restaurante</strong>
+            <p>Descobrir quantas mesas o seu salão deixa vazias e quanto daria para recuperar.</p>
+          </div>
+          <span className="chamada" style={{ color: "var(--vermelho)" }}>Fazer diagnóstico →</span>
+        </Link>
       </div>
     </main>
   );

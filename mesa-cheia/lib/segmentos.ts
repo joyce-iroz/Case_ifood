@@ -7,6 +7,7 @@ export const SEGMENTOS = [
   { id: "frequenta_outras", rotulo: "Vem, mas em outros horários" },
   { id: "delivery_nunca_veio", rotulo: "Pede delivery e nunca veio ao salão" },
   { id: "sumiu_60_dias", rotulo: "Não aparece há mais de 60 dias" },
+  { id: "cozinha_similar", rotulo: "Pede a mesma cozinha em outros restaurantes da região" },
 ] as const;
 
 export type Segmento = (typeof SEGMENTOS)[number]["id"];
@@ -17,6 +18,12 @@ export const rotuloSegmento = (s: Segmento) => SEGMENTOS.find((x) => x.id === s)
 export type Janela = { dia: number; inicio: number; fim: number };
 
 export type VisitaCliente = { data: string; hora: number };
+
+/** delivery: pede deste restaurante · salao: já sentou aqui · regiao: cliente iFood de outros restaurantes. */
+export type Origem = "delivery" | "salao" | "regiao";
+
+/** Segmentos cujos clientes o restaurante só vê em número: o dado é da plataforma. */
+export const segmentoAnonimo = (s: Segmento) => s === "cozinha_similar";
 
 export const DIAS_RECENTES = 60;
 
@@ -34,7 +41,7 @@ export function visitouNaJanela(visitas: VisitaCliente[], janela: Janela, hoje: 
 
 /** Segmento do cliente para a janela. Os quatro segmentos não se sobrepõem. */
 export function classificarCliente(
-  origem: "delivery" | "salao",
+  origem: Origem,
   visitas: VisitaCliente[],
   janela: Janela,
   hoje: string,
@@ -43,5 +50,8 @@ export function classificarCliente(
   if (visitas.some((v) => recente(v, hoje))) return "frequenta_outras";
   if (visitas.length > 0) return "sumiu_60_dias";
   if (origem === "delivery") return "delivery_nunca_veio";
+  // Cliente iFood que pede a mesma cozinha em outros restaurantes perto e nunca veio aqui.
+  // O critério (2+ pedidos em 60 dias, até 3 km) é aplicado na origem do dado.
+  if (origem === "regiao") return "cozinha_similar";
   return null;
 }

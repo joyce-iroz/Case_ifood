@@ -7,6 +7,8 @@ import { formatarNumeroBR, lerNumeroBR } from "@/lib/numero";
 import { SEGMENTOS, type Segmento } from "@/lib/segmentos";
 import type { Bloqueio, TipoBeneficio } from "@/lib/campanha";
 import type { ContextoJanela, ResultadoCriacao } from "@/lib/emissao";
+import { projetar } from "@/lib/projecao";
+import { ProjecaoView } from "./Projecao";
 
 type Props = {
   dias: number[];
@@ -25,6 +27,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
   const [tipo, setTipo] = useState<TipoBeneficio>("percentual");
   const [valor, setValor] = useState("15");
   const [teto, setTeto] = useState("300");
+  const [semanas, setSemanas] = useState(1);
   const [ctx, setCtx] = useState<ContextoJanela | null>(contextoInicial);
   const [carregandoCtx, setCarregandoCtx] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -89,6 +92,7 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
           tipo,
           valor: valorNum,
           teto: tetoNum,
+          semanas,
         }),
       });
       const corpo = await r.json().catch(() => ({ erro: `Falha (${r.status})` }));
@@ -103,6 +107,29 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
       setEnviando(false);
     }
   }
+
+  // Projeção ao vivo: mesma função pura do servidor, com as taxas que o contexto trouxe.
+  const projecao = (() => {
+    if (!ctx) return null;
+    const elegiveis = ctx.contagens[segmento].elegiveis;
+    const v = lerNumeroBR(valor);
+    const t = lerNumeroBR(teto);
+    if (!elegiveis || !Number.isFinite(v) || !Number.isFinite(t)) return null;
+    const controle = elegiveis >= ctx.controleMinimo ? Math.round((elegiveis * ctx.controlePct) / 100) : 0;
+    return {
+      controle,
+      p: projetar({
+        emitidos: elegiveis - controle,
+        semanas,
+        tipo,
+        valor: v,
+        teto: t,
+        ticketMedio: ctx.ticketMedio,
+        descontoMax: ctx.regras.desconto_max,
+        taxa: ctx.taxas[segmento],
+      }),
+    };
+  })();
 
   const limite = ctx ? (tipo === "percentual" ? `máx. ${ctx.regras.desconto_max}%` : `máx. ${formatarMoeda(ctx.limiteValorFixo)}`) : "";
 
@@ -227,6 +254,19 @@ export function FormCampanha({ dias, horas, fecha, janelaInicial, contextoInicia
         </label>
       </div>
 
+      <label className="campo">
+        Duração
+        <select value={semanas} onChange={(e) => setSemanas(Number(e.target.value))}>
+          {[1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? "só a próxima ocorrência" : `${n} semanas seguidas`}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {projecao && <ProjecaoView projecao={projecao.p} controle={projecao.controle} />}
+
       <button className="botao primario" disabled={enviando}>
         {enviando ? "Emitindo…" : "Criar campanha e emitir benefícios"}
       </button>
@@ -248,6 +288,7 @@ function Resultado({ r }: { r: ResultadoCriacao | { erro: string } }) {
     return (
       <div className="sucesso">
         <b>Campanha criada.</b> {r.emitidos} benefícios emitidos, válidos {r.validade}.
+        {r.controle > 0 && <> {r.controle} clientes sorteados para o grupo de controle.</>}
         {r.foraPorIntervalo > 0 && (
           <> {r.foraPorIntervalo} clientes do segmento ficaram de fora: receberam oferta há menos de {r.regras.dias_entre_ofertas} dias.</>
         )}
