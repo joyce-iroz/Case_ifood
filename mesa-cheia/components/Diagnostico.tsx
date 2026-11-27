@@ -103,7 +103,7 @@ export function Diagnostico() {
         </div>
 
         <div className="campo" style={{ marginTop: 16 }}>
-          <span>Toque para trocar.</span>
+          <span>Como fica cada turno? Toque para trocar.</span>
           <div className="rolagem">
             <table className="grade grade-diagnostico">
               <thead>
@@ -138,6 +138,11 @@ export function Diagnostico() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="legenda-grade">
+            <span><i className="c-v3" />vazio: cerca de {OCUPACAO_NIVEL.vazio * 100}% das mesas ocupadas</span>
+            <span><i className="c-n1" />médio: cerca de {OCUPACAO_NIVEL.medio * 100}%</span>
+            <span><i className="c-n3" />cheio: cerca de {OCUPACAO_NIVEL.cheio * 100}%</span>
           </div>
         </div>
       </section>
