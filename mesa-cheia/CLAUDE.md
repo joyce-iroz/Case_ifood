@@ -107,6 +107,7 @@ app/
   api/planejador/[id]/descartar  POST
   api/planejador/diagnostico     GET: qual variável de chave existe + chamada de teste
   api/kits/[campanhaId]/entregue POST: dono copiou a mensagem da equipe
+  api/kits/[campanhaId]/escrever POST: o modelo escreve o kit (requisição própria)
   api/regras             GET / PATCH
   api/ocupacao/registrar POST {data, hora, pessoas}: o que um caixa enviaria; confere pausas
   api/campanhas/[id]/simular-cheia  POST (DEMO): 85% na 1ª ocorrência, para mostrar a pausa
@@ -132,7 +133,8 @@ lib/
   planejador.ts          gerar/aprovar/descartar/listar ("server-only")
   llm.ts                 gerarJson para Groq, Grok ou Gemini, diagnóstico ("server-only")
   kit-regras.ts          validação e template do kit, conferência de números (puro)
-  kit.ts                 gerarKit, carregarKits, marcarKitEntregue ("server-only")
+  kit.ts                 gravarKitTemplate, escreverKitComModelo, carregarKits,
+                         marcarKitEntregue ("server-only")
   copiar.ts              copiar para a área de transferência (navegador)
   numero.ts              lerNumeroBR, formatarNumeroBR, lerCampoNumero (puro)
   projecao.ts            taxas por segmento e projeção de retorno (puro)
@@ -297,10 +299,18 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   cardápio completo. Para `openai/gpt-oss` no Groq: `reasoning_effort: low` e
   `max_completion_tokens: 2000`. HTTP 429 com espera de até 20 s (cabeçalho
   Retry-After ou "try again in Xs") espera e repete uma vez (`pedirComEspera`);
-  senão vira erro legível, sem o id da organização.
-- **Kit de ativação (IA, só texto).** `criarCampanha`, depois de emitir,
-  chama `gerarKit` uma vez (formulário e planejador, sem distinção). Nunca no
-  carregamento de página. Validação (`validarKit`): 4 campos de texto não
+  senão vira `LimiteError`, com mensagem legível e sem o id da organização. O
+  planejador para no primeiro `LimiteError` (as tentativas 2 e 3 no mesmo minuto
+  cairiam no limite e gastariam mais tokens) e vai à regra fixa; o selo diz
+  "o limite por minuto do modelo acabou", não "reprovado na validação".
+- **Kit de ativação (IA, só texto).** Duas etapas, em requisições separadas.
+  `criarCampanha`, depois de emitir, grava só o texto fixo do público
+  (`gravarKitTemplate`, sem modelo), para que aprovar uma proposta gaste uma
+  chamada só e o limite por minuto do Groq gratuito não derrube proposta e kit
+  juntos. O texto do modelo vem de `POST /api/kits/[id]/escrever`
+  (`escreverKitComModelo`), disparado pelo botão "Escrever com IA" no kit; se
+  passar na validação, substitui o texto atual, senão o atual fica e a tela mostra
+  o motivo. Nunca no carregamento de página. Validação (`validarKit`): 4 campos de texto não
   vazios, `script_garcom` ≤ 45 palavras, `cartaz_titulo` ≤ 6 palavras, e
   `conferirNumeros`: todo "N%" ou "R$ N" escrito tem de ser o benefício da
   campanha (o garçom lê em voz alta); e `conferirEspecifico`: nenhuma frase de
@@ -310,8 +320,8 @@ supabase/schema.sql      colar no SQL Editor do Supabase
   `publico` (`publicoDoSegmento`: quem é o cliente e como falar com ele), montada
   por `entradaKit`. O salão troca `{nome}` pelo primeiro nome (`aplicarNome`, no
   servidor); o painel mostra "[nome do cliente]". O template também é por público. Falhou: mais uma tentativa com os erros;
-  falhou de novo: `kitTemplate`, `modelo` = null. `gerarKit` nunca lança: a
-  campanha não quebra por causa do kit. Nome e cozinha do restaurante entram
+  falhou de novo: fica o texto que já estava. HTTP 429 ou falta de chave param na
+  hora, sem segunda tentativa. A campanha nunca quebra por causa do kit. Nome e cozinha do restaurante entram
   no prompt como dados não confiáveis; a saída só é exibida, não toca valor,
   teto, emissão nem resgate. O salão mostra o `script_garcom` acima do Aplicar
   ("O que dizer ao cliente"). Kit "entregue" = o dono copiou a mensagem da

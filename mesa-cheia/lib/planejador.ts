@@ -7,7 +7,7 @@ import { paginar } from "./dados";
 import { RESTAURANTE_DEMO_ID, formatarHora, formatarJanela, NOMES_DIA } from "./dominio";
 import { avaliarJanela, avaliarProposta, carregarBase, criarCampanha, tamanhoControle, type Base, type ResultadoCriacao } from "./emissao";
 import { projetar, type Projecao } from "./projecao";
-import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
+import { gerarJson, LimiteError, modeloConfigurado, SemChaveError } from "./llm";
 import { calcularCandidatas } from "./janelas";
 import {
   JANELAS_NO_CARDAPIO,
@@ -228,7 +228,9 @@ export async function gerarProposta(id = RESTAURANTE_DEMO_ID): Promise<Planejame
       } catch (e) {
         erros.push(e instanceof Error ? e.message : String(e));
         tentativas.push({ numero: n, resposta, aprovada: false, erros, ms: Date.now() - t0 });
-        if (e instanceof SemChaveError) break; // sem chave, tentar de novo não muda nada
+        // Sem chave, tentar de novo não muda nada. Sem cota (429), a próxima tentativa
+        // no mesmo minuto também cai no limite e ainda gasta tokens.
+        if (e instanceof SemChaveError || e instanceof LimiteError) break;
         errosAnteriores = [];
         continue;
       }

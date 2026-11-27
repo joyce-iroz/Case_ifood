@@ -167,7 +167,11 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
           <div className="proposta-origem">
             {plano.origem === "modelo" && <span className="selo">propostas do modelo · {plano.modelo}</span>}
             {plano.origem === "fallback" && (
-              <span className="selo selo-demo">regra fixa: nenhuma proposta do modelo passou na validação</span>
+              <span className="selo selo-demo">
+                {limiteAtingido(plano)
+                  ? "regra fixa: o limite por minuto do modelo acabou"
+                  : "regra fixa: nenhuma proposta do modelo passou na validação"}
+              </span>
             )}
             {plano.origem === "nenhuma" && <span className="selo">sem janela candidata</span>}
             {plano.status === "aprovada" && <span className="selo selo-resgatado">aprovada</span>}
@@ -177,7 +181,11 @@ export function Planejador({ inicial }: { inicial: PlanejamentoView | null }) {
 
           {plano.origem === "fallback" && plano.tentativas.length > 0 && (
             <div className="aviso motivo-fallback">
-              <b>Por que o modelo foi reprovado (tentativa {plano.tentativas.at(-1)!.numero}):</b>
+              <b>
+                {limiteAtingido(plano)
+                  ? `O modelo não respondeu (tentativa ${plano.tentativas.at(-1)!.numero}): a cota por minuto do plano gratuito acabou. Espere cerca de 1 minuto e toque em gerar de novo.`
+                  : `Por que o modelo foi reprovado (tentativa ${plano.tentativas.at(-1)!.numero}):`}
+              </b>
               <ul>
                 {plano.tentativas
                   .at(-1)!
@@ -520,6 +528,11 @@ function PreviaView({ previa, carregando }: { previa: Previa | null; carregando:
   );
 }
 
+/** A última tentativa caiu no limite por minuto (HTTP 429), não numa validação. */
+function limiteAtingido(plano: { tentativas: { erros: string[] }[] }) {
+  return plano.tentativas.at(-1)?.erros.some((e) => e.includes("HTTP 429")) ?? false;
+}
+
 function ResultadoAprovacao({ r }: { r: ResultadoCriacao }) {
   if (r.ok)
     return (
@@ -527,11 +540,14 @@ function ResultadoAprovacao({ r }: { r: ResultadoCriacao }) {
         <b>Campanha criada.</b> {r.emitidos} benefícios emitidos, válidos {r.validade}.
         {r.controle > 0 && <> {r.controle} clientes sorteados para o grupo de controle.</>}
         {r.foraPorIntervalo > 0 && <> {r.foraPorIntervalo} clientes ficaram de fora por oferta recente.</>}{" "}
-        {r.kit.gerado
-          ? r.kit.modelo
-            ? "Kit de ativação gerado pelo modelo."
-            : "Kit de ativação montado pelo template fixo."
-          : "O kit de ativação não foi gravado; a campanha segue ativa."}
+        {r.kit.gerado ? (
+          <>
+            O kit já está com o texto fixo deste público. Para o modelo escrever, toque em “Escrever com IA” na{" "}
+            <a href="/dono?aba=campanhas">aba Campanhas</a>: é outra chamada, separada da proposta.
+          </>
+        ) : (
+          "O kit de ativação não foi gravado; a campanha segue ativa."
+        )}
       </div>
     );
   return (

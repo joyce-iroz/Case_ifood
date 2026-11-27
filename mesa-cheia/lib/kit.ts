@@ -8,8 +8,10 @@ import "server-only";
 // resgate. O pior que um prompt injetado consegue é um texto ruim no kit, que o dono vê
 // antes de copiar.
 import { supabaseServidor } from "./supabase/server";
-import { gerarJson, modeloConfigurado, SemChaveError } from "./llm";
-import { FRASES_GENERICAS, kitTemplate, validarKit, type BeneficioKit, type EntradaKit, type TextosKit } from "./kit-regras";
+import { gerarJson, LimiteError, modeloConfigurado, SemChaveError } from "./llm";
+import { COLUNAS_CAMPANHA, carregarRestaurante, lerCampanha } from "./dados";
+import { textoBeneficio } from "./campanha";
+import { FRASES_GENERICAS, entradaKit, kitTemplate, validarKit, type EntradaKit, type TextosKit } from "./kit-regras";
 
 const INSTRUCAO_KIT = `Você escreve textos curtos para a equipe de um restaurante divulgar uma campanha.
 Você só escreve texto. Não invente valores, datas, horários, prazos ou condições além dos que estão em "dados".
@@ -35,19 +37,42 @@ Se a entrada tiver "erros_da_tentativa_anterior", corrija exatamente esses ponto
 const TENTATIVAS_KIT = 2; // uma tentativa e mais uma
 
 /**
- * Gera e grava o kit da campanha. Nunca lança: a aprovação da campanha não pode
- * quebrar por causa do kit. Devolve de onde veio o texto, ou null se nem o
- * template conseguiu ser gravado.
+ * Na criação da campanha: grava o texto fixo do público, sem chamar o modelo. Assim
+ * aprovar uma proposta gasta uma chamada só (a do planejador), e o limite por minuto
+ * do plano gratuito não derruba as duas coisas juntas. Nunca lança.
  */
-export async function gerarKit(
-  campanhaId: string,
-  entrada: EntradaKit,
-  beneficio: BeneficioKit,
-): Promise<{ modelo: string | null } | null> {
-  let textos: TextosKit | null = null;
-  let modelo: string | null = null;
+export async function gravarKitTemplate(campanhaId: string, entrada: EntradaKit): Promise<boolean> {
+  try {
+    const { error } = await supabaseServidor()
+      .from("kits")
+      .upsert({ campanha_id: campanhaId, ...kitTemplate(entrada), modelo: null }, { onConflict: "campanha_id", ignoreDuplicates: true });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error(`[kit] não gravou o template da campanha ${campanhaId}: ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
+export type ResultadoKit = { ok: true; modelo: string } | { ok: false; erro: string };
+
+/**
+ * Requisição separada: o dono pede ao modelo para escrever o kit de uma campanha que já
+ * existe. Se passar na validação, substitui o texto atual; se não, o texto atual fica.
+ */
+export async function escreverKitComModelo(campanhaId: string): Promise<ResultadoKit> {
+  const db = supabaseServidor();
+  const { data, error } = await db.from("campanhas").select(COLUNAS_CAMPANHA).eq("id", campanhaId).maybeSingle();
+  if (error) throw error;
+  if (!data) return { ok: false, erro: "Campanha não encontrada." };
+  const c = lerCampanha(data);
+  const r = await carregarRestaurante();
+  const entrada = entradaKit({ nome: r.nome, cozinha: r.cozinha, ticket_medio: r.ticket_medio }, c, textoBeneficio(c.tipo, c.valor));
+  const beneficio = { tipo: c.tipo, valor: c.valor };
+
   let erros: string[] = [];
-  for (let n = 1; n <= TENTATIVAS_KIT && !textos; n++) {
+  let ultimoErro = "";
+  for (let n = 1; n <= TENTATIVAS_KIT; n++) {
     try {
       const resposta = await gerarJson(
         INSTRUCAO_KIT,
@@ -56,27 +81,26 @@ export async function gerarKit(
       );
       const v = validarKit(resposta, beneficio, entrada);
       if (v.ok) {
-        textos = v.kit;
-        modelo = modeloConfigurado();
-      } else erros = v.erros;
+        const modelo = modeloConfigurado();
+        const linha = { ...v.kit, modelo, criado_em: new Date().toISOString() };
+        const up = await db.from("kits").update(linha).eq("campanha_id", campanhaId).select("campanha_id");
+        if (up.error) throw up.error;
+        if (!up.data?.length) {
+          const ins = await db.from("kits").insert({ campanha_id: campanhaId, ...linha });
+          if (ins.error) throw ins.error;
+        }
+        return { ok: true, modelo };
+      }
+      erros = v.erros;
+      ultimoErro = `O texto do modelo não passou na validação: ${v.erros.join("; ")}`;
     } catch (e) {
+      ultimoErro = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
+      // Sem chave ou sem cota, tentar de novo agora só gasta mais limite.
+      if (e instanceof SemChaveError || e instanceof LimiteError) break;
       erros = [];
-      console.warn(`[kit] tentativa ${n} falhou: ${e instanceof Error ? e.message : String(e)}`);
-      if (e instanceof SemChaveError) break; // sem chave, tentar de novo não muda nada
     }
   }
-  if (!textos) textos = kitTemplate(entrada);
-
-  try {
-    const { error } = await supabaseServidor()
-      .from("kits")
-      .upsert({ campanha_id: campanhaId, ...textos, modelo }, { onConflict: "campanha_id", ignoreDuplicates: true });
-    if (error) throw error;
-    return { modelo };
-  } catch (e) {
-    console.error(`[kit] não gravou o kit da campanha ${campanhaId}: ${e instanceof Error ? e.message : String(e)}`);
-    return null;
-  }
+  return { ok: false, erro: `${ultimoErro.replace(/\.?\s*$/, ".")} O texto atual do kit continua valendo.` };
 }
 
 export type Kit = TextosKit & { campanha_id: string; modelo: string | null; criado_em: string; entregue_em: string | null };

@@ -27,7 +27,7 @@ import {
   type Regras,
 } from "./campanha";
 import { SEGMENTOS, classificarCliente, rotuloSegmento, type Janela, type Segmento } from "./segmentos";
-import { gerarKit } from "./kit";
+import { gravarKitTemplate } from "./kit";
 import { calcularTaxas, type Taxas } from "./projecao";
 import { medirControle, sortearControle } from "./controle";
 import { entradaKit } from "./kit-regras";
@@ -324,16 +324,16 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
     throw emissao.error ?? ctrl.error;
   }
 
-  // Kit de ativação: uma vez, logo depois da emissão. gerarKit nunca lança; se tudo
-  // falhar, a campanha segue criada e o painel mostra que ela está sem kit.
-  const kit = await gerarKit(
+  // Kit de ativação: aqui só o texto fixo do público, sem modelo. O texto do modelo é
+  // outra requisição (POST /api/kits/[id]/escrever), para não somar ao limite por
+  // minuto da chamada do planejador. Nunca lança.
+  const kitGravado = await gravarKitTemplate(
     campanha.id,
     entradaKit(
       { nome: ctx.restaurante.nome, cozinha: ctx.restaurante.cozinha, ticket_medio: ctx.restaurante.ticket_medio },
       p,
       textoBeneficio(p.tipo, p.valor),
     ),
-    { tipo: p.tipo, valor: p.valor },
   );
 
   return {
@@ -344,6 +344,6 @@ export async function criarCampanha(entrada: unknown, id = RESTAURANTE_DEMO_ID):
     foraPorIntervalo: recentes.length,
     validade: formatarValidade(ctx.proxima.datas, p.hora_inicio, p.hora_fim),
     regras: ctx.regras,
-    kit: { gerado: !!kit, modelo: kit?.modelo ?? null },
+    kit: { gerado: kitGravado, modelo: null },
   };
 }

@@ -34,6 +34,9 @@ export class SemChaveError extends Error {
   }
 }
 
+/** HTTP 429: a cota do plano acabou por agora. Repetir na mesma hora só piora. */
+export class LimiteError extends Error {}
+
 const temValor = (n: string) => !!process.env[n]?.trim();
 
 /**
@@ -103,7 +106,7 @@ async function chamarCompativelOpenAI(
 async function falhaHttp(resp: Response, quem: string): Promise<never> {
   const corpo = (await resp.text().catch(() => "")).replace(/org_[A-Za-z0-9]+/g, "org_…");
   if (resp.status === 429)
-    throw new Error(
+    throw new LimiteError(
       `${quem} atingiu o limite de uso do plano (HTTP 429). Espere um minuto e gere de novo. Detalhe: ${corpo.slice(0, 160)}`,
     );
   throw new Error(`${quem} respondeu HTTP ${resp.status}: ${corpo.slice(0, 300)}`);

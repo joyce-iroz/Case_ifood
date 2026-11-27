@@ -31,6 +31,27 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
   const item = itens[Math.min(sel, itens.length - 1)];
   const kit = item?.kit;
 
+  const [escrevendo, setEscrevendo] = useState(false);
+  const [falhaModelo, setFalhaModelo] = useState<string | null>(null);
+
+  // Requisição própria, separada da proposta do planejador: o limite por minuto do
+  // plano gratuito não derruba as duas juntas.
+  async function escreverComModelo() {
+    if (!item || escrevendo) return;
+    setEscrevendo(true);
+    setFalhaModelo(null);
+    try {
+      const r = await fetch(`/api/kits/${item.campanhaId}/escrever`, { method: "POST" });
+      const j = (await r.json()) as { ok: boolean; erro?: string };
+      if (!j.ok) setFalhaModelo(j.erro ?? "O modelo não respondeu.");
+      else router.refresh();
+    } catch {
+      setFalhaModelo("Sem conexão. Tente de novo.");
+    } finally {
+      setEscrevendo(false);
+    }
+  }
+
   async function copiarAba(qual: Aba) {
     if (!kit) return;
     const texto =
@@ -59,7 +80,13 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
       )}
 
       {!kit ? (
-        <p className="aviso">Esta campanha ficou sem kit: a geração e o template falharam ao gravar.</p>
+        <div className="aviso">
+          <p>Esta campanha ficou sem kit: o texto fixo não foi gravado.</p>
+          <button type="button" className="botao" onClick={escreverComModelo} disabled={escrevendo}>
+            {escrevendo ? "Escrevendo…" : "Escrever com IA"}
+          </button>
+          {falhaModelo && <p>{falhaModelo}</p>}
+        </div>
       ) : (
         <>
           <div className="kit-cabeca">
@@ -69,12 +96,17 @@ export function KitAtivacao({ itens }: { itens: ItemKit[] }) {
             {kit.modelo ? (
               <span className="selo">texto do modelo · {kit.modelo}</span>
             ) : (
-              <span className="selo selo-demo">texto fixo deste público: o modelo falhou ou escreveu algo genérico</span>
+              <span className="selo selo-demo">texto fixo deste público</span>
             )}
+            <button type="button" className="botao botao-ia" onClick={escreverComModelo} disabled={escrevendo}>
+              {escrevendo ? "Escrevendo…" : kit.modelo ? "Reescrever com IA" : "Escrever com IA"}
+            </button>
             {kit.entregue_em && (
               <span className="selo selo-resgatado">entregue à equipe em {dataHora.format(new Date(kit.entregue_em))}</span>
             )}
           </div>
+
+          {falhaModelo && <p className="aviso kit-falha">{falhaModelo}</p>}
 
           <div className="kit-abas" role="tablist" aria-label="Peças do kit">
             {ABAS.map((a) => (

@@ -735,3 +735,7 @@ code, .mono { font-family: var(--fonte-mono); }
 .dinheiro-linha { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-size: 13px; color: var(--texto-2); }
 .dinheiro-linha b { font-family: var(--fonte-titulo); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--texto); }
 .dinheiro-linha b.verde { color: var(--verde); }
+
+/* kit: botão do modelo, requisição separada da proposta */
+.kit-cabeca .botao-ia { margin-left: auto; min-height: 36px; }
+.kit-falha { margin: 0 0 12px; }
