@@ -8,6 +8,7 @@ export default function Inicio() {
     <main className="inicio">
       <div>
         <Marca tamanho={32} />
+        <span className="inicio-rotulo">Restaurante de demonstração</span>
         <h1>Cantina do Bairro</h1>
         <p className="legenda">Quem está usando?</p>
       </div>
@@ -37,6 +38,14 @@ export default function Inicio() {
           <span className="chamada">Abrir teclado →</span>
         </Link>
       </div>
+
+      <Link href="/diagnostico" className="inicio-novo">
+        <div>
+          <strong>Tem um restaurante e quer usar o Mesa Cheia?</strong>
+          <p>Veja em um minuto quantas mesas ficam vazias no seu salão e quanto dá para recuperar.</p>
+        </div>
+        <span className="chamada">Fazer diagnóstico →</span>
+      </Link>
     </main>
   );
 }

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Marca } from "@/components/Marca";
 import { Diagnostico } from "@/components/Diagnostico";
 
@@ -9,6 +10,9 @@ export default function PaginaDiagnostico() {
       <header className="barra">
         <div className="barra-conteudo">
           <Marca />
+          <nav className="papeis-nav" aria-label="Navegação">
+            <Link href="/">Ver a demonstração</Link>
+          </nav>
         </div>
       </header>
       <main className="pagina diagnostico">

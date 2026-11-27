@@ -743,3 +743,18 @@ code, .mono { font-family: var(--fonte-mono); }
 .dias-editor { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .dias-editor .opcao { min-width: 64px; }
 .editor-janelas > .legenda { margin-top: 8px; }
+
+/* entrada: a Cantina é a demo; o bloco de baixo é para outros restaurantes */
+.inicio-rotulo { display: block; margin-top: 20px; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-suave); }
+.inicio-rotulo + h1 { margin-top: 4px; }
+.inicio-novo {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px;
+  padding: 28px 32px; border-radius: var(--raio); text-decoration: none; color: var(--texto);
+  background: linear-gradient(160deg, var(--vermelho-fundo), var(--superficie) 70%);
+  border: 1px solid var(--vermelho-borda);
+}
+.inicio-novo:hover { border-color: var(--vermelho); }
+.inicio-novo strong { font-family: var(--fonte-titulo); font-size: clamp(20px, 2.6vw, 26px); font-weight: 600; letter-spacing: -0.01em; }
+.inicio-novo p { margin: 6px 0 0; color: var(--texto-2); font-size: 15px; max-width: 560px; }
+.inicio-novo .chamada { color: var(--vermelho); font-weight: 600; white-space: nowrap; }
+@media (max-width: 600px) { .inicio-novo { padding: 22px 20px; } }

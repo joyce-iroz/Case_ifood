@@ -22,9 +22,10 @@ dirigidos a clientes específicos. Dois usuários:
 - o atendente de salão, que aplica o benefício na conta.
 
 Sem login e sem autenticação. A entrada do app (`/`) é um seletor de papel com
-"Sou o dono" (`/dono`) e "Sou o salão" (`/salao`). A página de captação
-(`/diagnostico`) é para outros restaurantes: não aparece na entrada da Cantina
-e não tem link de volta para ela.
+"Sou o dono" (`/dono`) e "Sou o salão" (`/salao`), sob o rótulo "Restaurante
+de demonstração · Cantina do Bairro". Abaixo, separado, um bloco para outros
+restaurantes ("Tem um restaurante e quer usar o Mesa Cheia?") leva à página de
+captação (`/diagnostico`), que tem "Ver a demonstração" de volta.
 
 A demo usa um único restaurante, "Cantina do Bairro" (italiana, 64 lugares,
 ticket médio R$ 78, terça a domingo, 11h–15h e 18h–23h), com id fixo
